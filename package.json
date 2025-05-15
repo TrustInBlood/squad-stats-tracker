@@ -1,0 +1,31 @@
+{
+  "name": "squad-stats-tracker",
+  "version": "1.0.0",
+  "description": "Discord bot for tracking Squad game server statistics",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "test": "jest"
+  },
+  "keywords": [
+    "discord",
+    "bot",
+    "squad",
+    "game",
+    "statistics"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "discord.js": "^14.14.1",
+    "dotenv": "^16.4.1",
+    "mariadb": "^3.2.3",
+    "sequelize": "^6.37.7",
+    "winston": "^3.11.0"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "nodemon": "^3.0.3"
+  }
+}

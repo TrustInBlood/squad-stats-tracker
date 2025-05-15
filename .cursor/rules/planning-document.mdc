@@ -1,0 +1,9 @@
+---
+description: Beginning of new conversations to ensure consistancy.
+globs: 
+alwaysApply: false
+---
+Always read the [PLANNING.md](mdc:PLANNING.md) file at the beginning of a new conversation. 
+
+
+Ensure you are providing suggestions that fit that file. 

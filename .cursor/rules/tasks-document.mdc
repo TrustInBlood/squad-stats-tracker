@@ -1,0 +1,11 @@
+---
+description: When starting, finishing, or implementing a task. 
+globs: 
+alwaysApply: false
+---
+Read the [TASKS.md](mdc:TASKS.md) file when starting, finishing, or implementing a new task. 
+
+Update the tasks file. 
+
+
+If necessary, suggest updates to the task file.
