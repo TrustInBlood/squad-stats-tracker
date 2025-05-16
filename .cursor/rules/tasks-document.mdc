@@ -1,7 +1,7 @@
 ---
-description: When starting, finishing, or implementing a task. 
+description: 
 globs: 
-alwaysApply: false
+alwaysApply: true
 ---
 Read the [TASKS.md](mdc:TASKS.md) file when starting, finishing, or implementing a new task. 
 

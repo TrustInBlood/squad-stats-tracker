@@ -121,3 +121,18 @@ SquadStats is a Discord bot that collects and stores Squad game server statistic
 - User engagement metrics
 - Data accuracy when compared to in-game stats
 - Administrator satisfaction surveys
+
+## Configuration Management
+
+### Server Configuration
+- Server details stored in `config/servers.json` (gitignored)
+- Supports multiple Squad servers
+- Configuration includes:
+  - Server connection details (host, ports)
+  - RCON authentication
+  - Log file locations
+
+### Security Considerations
+- **TODO**: Review and improve credential management
+  - Current: RCON passwords stored in plaintext in config file
+  - Future: Consider moving sensitive data to environment variables or db

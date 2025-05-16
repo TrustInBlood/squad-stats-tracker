@@ -7,6 +7,7 @@
 - [X] Set up basic Node.js project structure
 - [X] Initialize npm and install core dependencies
 - [X] Create README with project overview
+- [X] Set up server configuration structure
 - [ ] Set up ESLint/Prettier for code formatting
 - [ ] Configure basic CI/CD pipeline
 
@@ -29,11 +30,14 @@
 ## Phase 2: Squad Server Integration
 
 ### Server Connection
-- [ ] Research Squad server connection methods
+- [X] Research Squad server connection methods
+- [X] Create server configuration structure
 - [ ] Implement RCON connection module
 - [ ] Create connection manager for multiple servers
 - [ ] Implement error handling and reconnection logic
 - [ ] Add server authentication and security measures
+- [ ] **TODO**: Improve credential management
+  - [ ] Move RCON passwords to environment variables or db
 
 ### Data Collection
 - [ ] Identify key data points to collect from Squad servers

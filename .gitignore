@@ -42,4 +42,7 @@ env/
 venv/
 ENV/
 .env/
-.venv/ 
+.venv/
+
+# Configuration
+config/servers.json 
