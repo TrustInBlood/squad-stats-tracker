@@ -20,8 +20,9 @@
   "dependencies": {
     "discord.js": "^14.14.1",
     "dotenv": "^16.4.1",
-    "mariadb": "^3.2.3",
+    "mariadb": "^3.4.2",
     "sequelize": "^6.37.7",
+    "sequelize-cli": "^6.6.3",
     "winston": "^3.11.0"
   },
   "devDependencies": {
