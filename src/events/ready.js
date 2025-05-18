@@ -22,9 +22,33 @@ module.exports = {
         // Initialize server manager
         try {
             await serverManager.connectToAllServers();
-            logger.info('Server manager initialized successfully');
+            
+            // Log detailed connection status
+            const status = serverManager.getConnectionStatus();
+            logger.info('Server connection status:', {
+                total: status.total,
+                connected: status.connected,
+                pending: status.pending,
+                servers: status.servers
+            });
+
+            // Update bot status to show connection status
+            client.user.setPresence({
+                activities: [{ 
+                    name: `Squad Stats (${status.connected}/${status.total} servers)`,
+                    type: 2 // Watching
+                }],
+                status: status.connected > 0 ? 'online' : 'idle'
+            });
         } catch (error) {
             logger.error('Failed to initialize server manager:', error);
+            client.user.setPresence({
+                activities: [{ 
+                    name: 'Squad Stats (Error)',
+                    type: 2 // Watching
+                }],
+                status: 'dnd' // Do Not Disturb
+            });
         }
     },
 }; 
