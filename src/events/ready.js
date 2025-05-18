@@ -1,9 +1,13 @@
 const logger = require('../utils/logger');
+const ServerManager = require('../utils/serverManager');
+
+// Create a single server manager instance for the bot
+const serverManager = new ServerManager();
 
 module.exports = {
     name: 'ready',
     once: true,
-    execute(client) {
+    async execute(client) {
         logger.info(`Ready! Logged in as ${client.user.tag}`);
         
         // Set bot status
@@ -14,5 +18,13 @@ module.exports = {
             }],
             status: 'online'
         });
+
+        // Initialize server manager
+        try {
+            await serverManager.connectToAllServers();
+            logger.info('Server manager initialized successfully');
+        } catch (error) {
+            logger.error('Failed to initialize server manager:', error);
+        }
     },
 }; 
