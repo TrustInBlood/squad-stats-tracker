@@ -45,6 +45,6 @@ ENV/
 .venv/
 
 # Configuration
-config/servers.json
-config/*.local.json
-!config/servers.example.json 
+src/config/servers.json
+src/config/*.local.json
+!src/config/servers.example.js
