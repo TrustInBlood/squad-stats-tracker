@@ -13,8 +13,8 @@ module.exports = {
         // Set bot status
         client.user.setPresence({
             activities: [{ 
-                state: 'Squad Stats',
-                type: 4 // Custom
+                name: 'Squad Stats',
+                type: 0 // Playing
             }],
             status: 'online'
         });
@@ -35,8 +35,8 @@ module.exports = {
             // Update bot status to show connection status
             client.user.setPresence({
                 activities: [{ 
-                    state: `Squad Stats (${status.connected}/${status.total} servers)`,
-                    type: 4 // Custom
+                    name: `Squad Stats (${status.connected}/${status.total} servers)`,
+                    type: 0 // Playing
                 }],
                 status: status.connected > 0 ? 'online' : 'idle'
             });
@@ -44,8 +44,8 @@ module.exports = {
             logger.error('Failed to initialize server manager:', error);
             client.user.setPresence({
                 activities: [{ 
-                    state: 'Squad Stats (Error)',
-                    type: 4 // Custom
+                    name: 'Squad Stats (Error)',
+                    type: 0 // Playing
                 }],
                 status: 'dnd' // Do Not Disturb
             });
