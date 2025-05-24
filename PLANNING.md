@@ -91,10 +91,11 @@ SquadStats is a Discord bot that collects and stores Squad game server statistic
 - Winston-based logging system
 
 ### Squad Server Integration
-- RCON connection
-- Log parsing
-- Direct server queries
-- Event handling
+- WebSocket connection using socket.io-client
+- Real-time event handling
+- Direct server queries via WebSocket
+- Event handling and data processing
+- Automatic reconnection and error handling
 
 ## Deployment Strategy
 - Deployed to an egg. 

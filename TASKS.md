@@ -32,17 +32,16 @@
 ### Server Connection
 - [X] Research Squad server connection methods
 - [X] Create server configuration structure
-- [ ] Implement RCON connection module
-- [ ] Create connection manager for multiple servers
-- [ ] Implement error handling and reconnection logic
-- [ ] Add server authentication and security measures
+- [X] Implement WebSocket connection module
+- [X] Create connection manager for multiple servers
+- [X] Implement error handling and reconnection logic
+- [X] Add server authentication and security measures
 - [ ] **TODO**: Improve credential management
-  - [ ] Move RCON passwords to environment variables or db
+  - [ ] Move server tokens to environment variables or db
 
 ### Data Collection
 - [ ] Identify key data points to collect from Squad servers
-- [ ] Implement event listeners for game events
-- [ ] Create data parser for server logs
+- [X] Implement event listeners for game events
 - [ ] Set up data normalization and cleaning
 - [ ] Implement data buffering to prevent database overload
 - [ ] Create data validation system

@@ -9,7 +9,7 @@ const sequelize = new Sequelize(
     host: process.env.DB_HOST,
     port: process.env.DB_PORT,
     dialect: 'mariadb',
-    logging: process.env.NODE_ENV === 'development' ? console.log : false,
+    logging: console.log,
     pool: {
       max: 5,
       min: 0,
