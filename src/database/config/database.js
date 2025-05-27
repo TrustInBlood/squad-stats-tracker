@@ -67,8 +67,9 @@ const sequelize = new Sequelize(
     pool: currentConfig.pool,
     define: {
       timestamps: true, // Adds createdAt and updatedAt timestamps
-      underscored: true, // Use snake_case rather than camelCase
-      freezeTableName: true // Don't pluralize table names
+      underscored: false, // Don't use snake_case for fields
+      freezeTableName: true, // Don't pluralize table names
+      underscoredAll: false // Don't use snake_case for column names
     }
   }
 );

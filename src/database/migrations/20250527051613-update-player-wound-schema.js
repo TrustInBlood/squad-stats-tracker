@@ -5,6 +5,10 @@ const { DataTypes } = require('sequelize');
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up(queryInterface, Sequelize) {
+    // First, drop the existing table
+    await queryInterface.dropTable('player_wounds');
+
+    // Then recreate it with the new schema
     await queryInterface.createTable('player_wounds', {
       id: {
         type: DataTypes.BIGINT,
@@ -136,4 +140,4 @@ module.exports = {
     // Then remove the table
     await queryInterface.dropTable('player_wounds');
   }
-};
+}; 

@@ -1,10 +1,12 @@
 // database/index.js
-const Player = require('./player');
-const Server = require('./server');
-const PlayerDamage = require('./player-damage');
-const PlayerDeath = require('./player-death');
-const PlayerWound = require('./player-wound');
-const PlayerRevive = require('./player-revive');
+const { sequelize } = require('../config/database');
+const Player = require('./player')(sequelize);
+const Server = require('./server')(sequelize);
+const PlayerDamage = require('./player-damage')(sequelize);
+const PlayerDeath = require('./player-death')(sequelize);
+const PlayerWound = require('./player-wound')(sequelize);
+const PlayerRevive = require('./player-revive')(sequelize);
+const DiscordSteamLink = require('./discord-steam-link')(sequelize);
 
 module.exports = {
   Player,
@@ -13,8 +15,6 @@ module.exports = {
   PlayerDeath,
   PlayerWound,
   PlayerRevive,
-  // More models will be added here as we create them
-  // DiscordSteamLink,
-  // DailyPlayerStats,
-  // etc.
+  DiscordSteamLink,
+  sequelize  // Export sequelize instance
 };

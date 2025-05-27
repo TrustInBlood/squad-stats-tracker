@@ -30,6 +30,13 @@ module.exports = (sequelize) => {
       allowNull: false,
       comment: 'Amount of damage dealt'
     },
+    damageType: {
+      type: DataTypes.ENUM('player', 'environment', 'vehicle', 'unknown'),
+      allowNull: false,
+      defaultValue: 'unknown',
+      index: true,
+      comment: 'Type of damage (player, environment, vehicle, or unknown)'
+    },
     weapon: {
       type: DataTypes.STRING(100),
       allowNull: true,
@@ -49,14 +56,14 @@ module.exports = (sequelize) => {
     },
     victimSteamID: {
       type: DataTypes.STRING(17),
-      allowNull: false,
+      allowNull: true,
       index: true,
-      comment: 'Steam ID of the victim'
+      comment: 'Steam ID of the victim (null for environmental damage)'
     },
     victimEOSID: {
       type: DataTypes.STRING(32),
-      allowNull: false,
-      comment: 'EOS ID of the victim'
+      allowNull: true,
+      comment: 'EOS ID of the victim (null for environmental damage)'
     },
     teamkill: {
       type: DataTypes.BOOLEAN,
@@ -71,8 +78,8 @@ module.exports = (sequelize) => {
     },
     victimTeamID: {
       type: DataTypes.INTEGER,
-      allowNull: false,
-      comment: 'Team ID of the victim'
+      allowNull: true,
+      comment: 'Team ID of the victim (null for environmental damage)'
     },
     rawData: {
       type: DataTypes.JSON,
@@ -108,6 +115,10 @@ module.exports = (sequelize) => {
         fields: ['teamkill']
       },
       {
+        name: 'idx_damage_type',
+        fields: ['damageType']
+      },
+      {
         name: 'idx_damage_daily_cleanup',
         fields: ['timestamp', 'serverID'] // For efficient daily cleanup
       }
@@ -121,11 +132,22 @@ module.exports = (sequelize) => {
     }
 
     try {
+      // Determine damage type
+      let damageType = 'unknown';
+      if (!eventData.data.victim) {
+        damageType = 'environment';
+      } else if (eventData.data.weapon?.includes('Vehicle')) {
+        damageType = 'vehicle';
+      } else if (eventData.data.attackerSteamID) {
+        damageType = 'player';
+      }
+
       const damageRecord = await this.create({
         serverID: eventData.serverID,
         timestamp: new Date(eventData.timestamp),
         chainID: eventData.data.chainID,
         damage: eventData.data.damage,
+        damageType,
         weapon: eventData.data.weapon,
         attackerSteamID: eventData.data.attackerSteamID,
         attackerEOSID: eventData.data.attackerEOSID,
@@ -155,28 +177,41 @@ module.exports = (sequelize) => {
     try {
       const damageRecords = eventDataArray
         .filter(event => event.event === 'PLAYER_DAMAGED')
-        .map(eventData => ({
-          serverID: eventData.serverID,
-          timestamp: new Date(eventData.timestamp),
-          chainID: eventData.data.chainID,
-          damage: eventData.data.damage,
-          weapon: eventData.data.weapon,
-          attackerSteamID: eventData.data.attackerSteamID,
-          attackerEOSID: eventData.data.attackerEOSID,
-          victimSteamID: eventData.data.victim?.steamID,
-          victimEOSID: eventData.data.victim?.eosID,
-          teamkill: eventData.data.teamkill || false,
-          attackerTeamID: eventData.data.attacker?.teamID,
-          victimTeamID: eventData.data.victim?.teamID,
-          rawData: eventData.data
-        }));
+        .map(eventData => {
+          // Determine damage type
+          let damageType = 'unknown';
+          if (!eventData.data.victim) {
+            damageType = 'environment';
+          } else if (eventData.data.weapon?.includes('Vehicle')) {
+            damageType = 'vehicle';
+          } else if (eventData.data.attackerSteamID) {
+            damageType = 'player';
+          }
+
+          return {
+            serverID: eventData.serverID,
+            timestamp: new Date(eventData.timestamp),
+            chainID: eventData.data.chainID,
+            damage: eventData.data.damage,
+            damageType,
+            weapon: eventData.data.weapon,
+            attackerSteamID: eventData.data.attackerSteamID,
+            attackerEOSID: eventData.data.attackerEOSID,
+            victimSteamID: eventData.data.victim?.steamID,
+            victimEOSID: eventData.data.victim?.eosID,
+            teamkill: eventData.data.teamkill || false,
+            attackerTeamID: eventData.data.attacker?.teamID,
+            victimTeamID: eventData.data.victim?.teamID,
+            rawData: eventData.data
+          };
+        });
 
       if (damageRecords.length === 0) {
         return results;
       }
 
       const createdRecords = await this.bulkCreate(damageRecords, {
-        ignoreDuplicates: true, // Skip duplicates instead of erroring
+        ignoreDuplicates: true,
         validate: true
       });
 

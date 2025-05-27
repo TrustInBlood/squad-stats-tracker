@@ -5,7 +5,7 @@ const { DataTypes } = require('sequelize');
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up(queryInterface, Sequelize) {
-    await queryInterface.createTable('player_revive', {
+    await queryInterface.createTable('player_revives', {
       id: {
         type: DataTypes.BIGINT,
         primaryKey: true,
@@ -64,36 +64,36 @@ module.exports = {
     });
 
     // Add indexes
-    await queryInterface.addIndex('player_revive', ['timestamp'], {
+    await queryInterface.addIndex('player_revives', ['timestamp'], {
       name: 'idx_revive_timestamp'
     });
 
-    await queryInterface.addIndex('player_revive', ['serverID', 'timestamp'], {
+    await queryInterface.addIndex('player_revives', ['serverID', 'timestamp'], {
       name: 'idx_revive_server_time'
     });
 
-    await queryInterface.addIndex('player_revive', ['reviverSteamID', 'timestamp'], {
+    await queryInterface.addIndex('player_revives', ['reviverSteamID', 'timestamp'], {
       name: 'idx_revive_reviver_time'
     });
 
-    await queryInterface.addIndex('player_revive', ['revivedSteamID', 'timestamp'], {
+    await queryInterface.addIndex('player_revives', ['revivedSteamID', 'timestamp'], {
       name: 'idx_revive_revived_time'
     });
 
-    await queryInterface.addIndex('player_revive', ['timestamp', 'serverID'], {
+    await queryInterface.addIndex('player_revives', ['timestamp', 'serverID'], {
       name: 'idx_revive_daily_cleanup'
     });
   },
 
   async down(queryInterface, Sequelize) {
     // Remove indexes first
-    await queryInterface.removeIndex('player_revive', 'idx_revive_timestamp');
-    await queryInterface.removeIndex('player_revive', 'idx_revive_server_time');
-    await queryInterface.removeIndex('player_revive', 'idx_revive_reviver_time');
-    await queryInterface.removeIndex('player_revive', 'idx_revive_revived_time');
-    await queryInterface.removeIndex('player_revive', 'idx_revive_daily_cleanup');
+    await queryInterface.removeIndex('player_revives', 'idx_revive_timestamp');
+    await queryInterface.removeIndex('player_revives', 'idx_revive_server_time');
+    await queryInterface.removeIndex('player_revives', 'idx_revive_reviver_time');
+    await queryInterface.removeIndex('player_revives', 'idx_revive_revived_time');
+    await queryInterface.removeIndex('player_revives', 'idx_revive_daily_cleanup');
 
     // Then remove the table
-    await queryInterface.dropTable('player_revive');
+    await queryInterface.dropTable('player_revives');
   }
 };

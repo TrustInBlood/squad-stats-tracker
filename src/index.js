@@ -3,6 +3,7 @@ const { Client, GatewayIntentBits, Collection } = require('discord.js');
 const logger = require('./utils/logger');
 const { initializeDatabase } = require('./database/init');
 const ServerManager = require('./utils/serverManager');
+const { sequelize } = require('./database/models');
 
 // Create a new client instance
 const client = new Client({
@@ -44,18 +45,29 @@ process.on('unhandledRejection', error => {
     logger.error('Unhandled promise rejection:', error);
 });
 
-// Cleanup on process termination
-process.on('SIGINT', async () => {
-    logger.info('Shutting down...');
+// Handle graceful shutdown
+async function shutdown(signal) {
+    logger.info(`Received ${signal}, starting graceful shutdown...`);
+    
     try {
-        serverManager.disconnectFromAllServers();
-        await client.destroy();
+        // Shutdown server manager first to flush any buffered events
+        await serverManager.shutdown();
+        
+        // Close database connection
+        await sequelize.close();
+        logger.info('Database connection closed');
+        
+        // Exit process
         process.exit(0);
     } catch (error) {
         logger.error('Error during shutdown:', error);
         process.exit(1);
     }
-});
+}
+
+// Handle shutdown signals
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 
 // Login to Discord with your client's token
 async function startBot() {
