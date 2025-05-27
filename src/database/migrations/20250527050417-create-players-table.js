@@ -1,47 +1,49 @@
 'use strict';
 
+const { DataTypes } = require('sequelize');
+
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up(queryInterface, Sequelize) {
     await queryInterface.createTable('players', {
       id: {
-        type: Sequelize.INTEGER,
+        type: DataTypes.INTEGER,
         primaryKey: true,
         autoIncrement: true
       },
       steamID: {
-        type: Sequelize.STRING(17),
+        type: DataTypes.STRING(17),
         allowNull: false,
         unique: true,
         comment: 'Steam ID (e.g., 76561198846542116)'
       },
       eosID: {
-        type: Sequelize.STRING(32),
+        type: DataTypes.STRING(32),
         allowNull: false,
         unique: true,
         comment: 'Epic Online Services ID (e.g., 000282ef021a48bea43ea1ebe9c0e0eb)'
       },
       lastKnownName: {
-        type: Sequelize.STRING(50),
+        type: DataTypes.STRING(50),
         allowNull: true,
         comment: 'Last known player name in game'
       },
       firstSeen: {
-        type: Sequelize.DATE,
-        defaultValue: Sequelize.NOW,
+        type: DataTypes.DATE,
+        defaultValue: DataTypes.NOW,
         comment: 'When we first saw this player'
       },
       isActive: {
-        type: Sequelize.BOOLEAN,
+        type: DataTypes.BOOLEAN,
         defaultValue: true,
         comment: 'Whether this player record is active'
       },
       createdAt: {
-        type: Sequelize.DATE,
+        type: DataTypes.DATE,
         allowNull: false
       },
       updatedAt: {
-        type: Sequelize.DATE,
+        type: DataTypes.DATE,
         allowNull: false
       }
     });

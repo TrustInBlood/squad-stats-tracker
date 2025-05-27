@@ -1,80 +1,82 @@
 'use strict';
 
+const { DataTypes } = require('sequelize');
+
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up(queryInterface, Sequelize) {
     await queryInterface.createTable('discord_steam_links', {
       id: {
-        type: Sequelize.INTEGER,
+        type: DataTypes.INTEGER,
         primaryKey: true,
         autoIncrement: true
       },
       discordID: {
-        type: Sequelize.STRING(20),
+        type: DataTypes.STRING(20),
         allowNull: false,
         comment: 'Discord user ID'
       },
       steamID: {
-        type: Sequelize.STRING(17),
+        type: DataTypes.STRING(17),
         allowNull: false,
         comment: 'Steam ID linked to this Discord account'
       },
       verificationCode: {
-        type: Sequelize.STRING(10),
+        type: DataTypes.STRING(10),
         allowNull: true,
         comment: 'Code user must type in-game to verify ownership'
       },
       isVerified: {
-        type: Sequelize.BOOLEAN,
+        type: DataTypes.BOOLEAN,
         defaultValue: false,
         comment: 'Whether the link has been verified'
       },
       isActive: {
-        type: Sequelize.BOOLEAN,
+        type: DataTypes.BOOLEAN,
         defaultValue: true,
         comment: 'Whether this is the currently displayed link (only one active per Discord user)'
       },
       isHidden: {
-        type: Sequelize.BOOLEAN,
+        type: DataTypes.BOOLEAN,
         defaultValue: false,
         comment: 'Whether this link is hidden from user view (admin tracking only)'
       },
       linkedBy: {
-        type: Sequelize.ENUM('user', 'admin', 'auto_detected'),
+        type: DataTypes.ENUM('user', 'admin', 'auto_detected'),
         defaultValue: 'user',
         comment: 'How this link was created'
       },
       confidence: {
-        type: Sequelize.ENUM('low', 'medium', 'high', 'verified'),
+        type: DataTypes.ENUM('low', 'medium', 'high', 'verified'),
         defaultValue: 'low',
         comment: 'Confidence level of this link'
       },
       verifiedAt: {
-        type: Sequelize.DATE,
+        type: DataTypes.DATE,
         allowNull: true,
         comment: 'When the link was verified'
       },
       verificationExpires: {
-        type: Sequelize.DATE,
+        type: DataTypes.DATE,
         allowNull: true,
         comment: 'When the verification code expires'
       },
       verificationServer: {
-        type: Sequelize.STRING(20),
+        type: DataTypes.STRING(20),
         allowNull: true,
         comment: 'Server where verification occurred'
       },
       notes: {
-        type: Sequelize.TEXT,
+        type: DataTypes.TEXT,
         allowNull: true,
         comment: 'Admin notes about this link'
       },
       createdAt: {
-        type: Sequelize.DATE,
+        type: DataTypes.DATE,
         allowNull: false
       },
       updatedAt: {
-        type: Sequelize.DATE,
+        type: DataTypes.DATE,
         allowNull: false
       }
     });

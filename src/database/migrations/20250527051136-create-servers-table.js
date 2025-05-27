@@ -1,41 +1,43 @@
 'use strict';
 
+const { DataTypes } = require('sequelize');
+
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up(queryInterface, Sequelize) {
     await queryInterface.createTable('servers', {
       id: {
-        type: Sequelize.INTEGER,
+        type: DataTypes.INTEGER,
         primaryKey: true,
         autoIncrement: true
       },
       serverID: {
-        type: Sequelize.STRING(20),
+        type: DataTypes.STRING(20),
         allowNull: false,
         unique: true,
         comment: 'Server identifier from Squad.js (e.g., "server4")'
       },
       serverName: {
-        type: Sequelize.STRING(100),
+        type: DataTypes.STRING(100),
         allowNull: true,
         comment: 'Friendly name for the server'
       },
       description: {
-        type: Sequelize.TEXT,
+        type: DataTypes.TEXT,
         allowNull: true,
         comment: 'Description of the server purpose/type'
       },
       isActive: {
-        type: Sequelize.BOOLEAN,
+        type: DataTypes.BOOLEAN,
         defaultValue: true,
         comment: 'Whether this server is currently active'
       },
       createdAt: {
-        type: Sequelize.DATE,
+        type: DataTypes.DATE,
         allowNull: false
       },
       updatedAt: {
-        type: Sequelize.DATE,
+        type: DataTypes.DATE,
         allowNull: false
       }
     });

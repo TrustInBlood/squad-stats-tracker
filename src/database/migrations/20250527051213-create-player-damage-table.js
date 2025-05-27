@@ -1,76 +1,78 @@
 'use strict';
 
+const { DataTypes } = require('sequelize');
+
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up(queryInterface, Sequelize) {
     await queryInterface.createTable('player_damage', {
       id: {
-        type: Sequelize.BIGINT,
+        type: DataTypes.BIGINT,
         primaryKey: true,
         autoIncrement: true
       },
       serverID: {
-        type: Sequelize.STRING(20),
+        type: DataTypes.STRING(20),
         allowNull: false,
         comment: 'Server identifier (e.g., "server4")'
       },
       timestamp: {
-        type: Sequelize.DATE,
+        type: DataTypes.DATE,
         allowNull: false,
         comment: 'When the damage occurred'
       },
       chainID: {
-        type: Sequelize.INTEGER,
+        type: DataTypes.INTEGER,
         allowNull: true,
         comment: 'Squad.js chain ID for event tracking'
       },
       damage: {
-        type: Sequelize.FLOAT,
+        type: DataTypes.FLOAT,
         allowNull: false,
         comment: 'Amount of damage dealt'
       },
       weapon: {
-        type: Sequelize.STRING(100),
+        type: DataTypes.STRING(100),
         allowNull: true,
         comment: 'Weapon that caused the damage (e.g., "BP_Mortarround4")'
       },
       attackerSteamID: {
-        type: Sequelize.STRING(17),
+        type: DataTypes.STRING(17),
         allowNull: true,
         comment: 'Steam ID of the attacker (null for environment damage)'
       },
       attackerEOSID: {
-        type: Sequelize.STRING(32),
+        type: DataTypes.STRING(32),
         allowNull: true,
         comment: 'EOS ID of the attacker'
       },
       victimSteamID: {
-        type: Sequelize.STRING(17),
+        type: DataTypes.STRING(17),
         allowNull: false,
         comment: 'Steam ID of the victim'
       },
       victimEOSID: {
-        type: Sequelize.STRING(32),
+        type: DataTypes.STRING(32),
         allowNull: false,
         comment: 'EOS ID of the victim'
       },
       teamkill: {
-        type: Sequelize.BOOLEAN,
+        type: DataTypes.BOOLEAN,
         defaultValue: false,
         comment: 'Whether this was friendly fire'
       },
       attackerTeamID: {
-        type: Sequelize.INTEGER,
+        type: DataTypes.INTEGER,
         allowNull: true,
         comment: 'Team ID of the attacker'
       },
       victimTeamID: {
-        type: Sequelize.INTEGER,
+        type: DataTypes.INTEGER,
         allowNull: false,
         comment: 'Team ID of the victim'
       },
       rawData: {
-        type: Sequelize.JSON,
+        type: DataTypes.JSON,
         allowNull: true,
         comment: 'Full Squad.js event data for debugging'
       }

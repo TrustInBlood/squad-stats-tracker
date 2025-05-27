@@ -1,61 +1,63 @@
 'use strict';
 
+const { DataTypes } = require('sequelize');
+
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up(queryInterface, Sequelize) {
     await queryInterface.createTable('player_revive', {
       id: {
-        type: Sequelize.BIGINT,
+        type: DataTypes.BIGINT,
         primaryKey: true,
         autoIncrement: true
       },
       serverID: {
-        type: Sequelize.STRING(20),
+        type: DataTypes.STRING(20),
         allowNull: false,
         comment: 'Server identifier (e.g., "server4")'
       },
       timestamp: {
-        type: Sequelize.DATE,
+        type: DataTypes.DATE,
         allowNull: false,
         comment: 'When the revive occurred'
       },
       chainID: {
-        type: Sequelize.INTEGER,
+        type: DataTypes.INTEGER,
         allowNull: true,
         comment: 'Squad.js chain ID for event tracking'
       },
       reviverSteamID: {
-        type: Sequelize.STRING(17),
+        type: DataTypes.STRING(17),
         allowNull: false,
         comment: 'Steam ID of the player who performed the revive'
       },
       reviverEOSID: {
-        type: Sequelize.STRING(32),
+        type: DataTypes.STRING(32),
         allowNull: false,
         comment: 'EOS ID of the player who performed the revive'
       },
       revivedSteamID: {
-        type: Sequelize.STRING(17),
+        type: DataTypes.STRING(17),
         allowNull: false,
         comment: 'Steam ID of the player who was revived'
       },
       revivedEOSID: {
-        type: Sequelize.STRING(32),
+        type: DataTypes.STRING(32),
         allowNull: false,
         comment: 'EOS ID of the player who was revived'
       },
       reviverTeamID: {
-        type: Sequelize.INTEGER,
+        type: DataTypes.INTEGER,
         allowNull: false,
         comment: 'Team ID of the reviver'
       },
       revivedTeamID: {
-        type: Sequelize.INTEGER,
+        type: DataTypes.INTEGER,
         allowNull: false,
         comment: 'Team ID of the revived player'
       },
       rawData: {
-        type: Sequelize.JSON,
+        type: DataTypes.JSON,
         allowNull: true,
         comment: 'Full Squad.js event data for debugging'
       }
