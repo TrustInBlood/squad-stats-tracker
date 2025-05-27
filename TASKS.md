@@ -21,11 +21,23 @@
 
 ### Database Setup
 - [X] Choose and set up database system (MariaDb)
-- [ ] Design and implement database schema
+- [X] Design and implement database schema
+  - [X] Player model with Steam/EOS IDs
+  - [X] Server model for server tracking
+  - [X] Player event models (damage, death, wound, revive)
+  - [X] Discord-Steam link model for account verification
+  - [ ] Player session tracking
 - [X] Create database connection module
-- [ ] Implement basic CRUD operations
-- [ ] Create data migration strategy
+- [X] Implement basic CRUD operations
+- [X] Create data migration strategy
+  - [X] Create migration files for all tables
+  - [X] Implement proper indexes for performance
+  - [X] Add data retention fields (timestamps)
+  - [X] Set up proper foreign key relationships
 - [ ] Set up connection pooling and optimization
+- [ ] Implement data retention policies
+- [ ] Create database backup system
+- [ ] Set up data pruning for old records
 
 ## Phase 2: Squad Server Integration
 
@@ -40,27 +52,51 @@
   - [ ] Move server tokens to environment variables or db
 
 ### Data Collection
-- [ ] Identify key data points to collect from Squad servers
+- [X] Identify key data points to collect from Squad servers
 - [X] Implement event listeners for game events
-- [ ] Set up data normalization and cleaning
-- [ ] Implement data buffering to prevent database overload
+- [X] Set up data normalization and cleaning
+- [ ] Implement data buffering system
+  - [ ] Design buffer strategy for high-volume events
+  - [ ] Implement batch processing
+  - [ ] Add buffer overflow protection
 - [ ] Create data validation system
+  - [ ] Add input validation for all models
+  - [ ] Implement data integrity checks
+  - [ ] Create validation error reporting
 
 ### Data Storage
-- [ ] Implement player data storage
-- [ ] Create match/round data storage
-- [ ] Implement server event logging
-- [ ] Set up data indexing for efficient queries
+- [X] Implement player data storage
+- [X] Create event data storage (damage, death, wound, revive)
+- [X] Set up data indexing for efficient queries
+  - [X] Add timestamp-based indexes for time-series queries
+  - [X] Create compound indexes for common query patterns
+  - [X] Implement server-specific indexes
+  - [X] Add player lookup indexes
 - [ ] Create data backup system
 - [ ] Implement data pruning for old records
+- [ ] Add data aggregation for statistics
 
 ## Phase 3: Core Bot Features
 
 ### Statistics Commands
 - [ ] Implement player stats command
+  - [ ] Basic stats (kills, deaths, K/D ratio)
+  - [ ] Weapon usage statistics
+  - [ ] Team performance metrics
+  - [ ] Historical performance trends
 - [ ] Create server stats command
+  - [ ] Current server status
+  - [ ] Player count trends
+  - [ ] Map rotation history
+  - [ ] Server performance metrics
 - [ ] Add match history command
+  - [ ] Recent matches
+  - [ ] Match details
+  - [ ] Player performance in matches
 - [ ] Implement leaderboard commands
+  - [ ] Global leaderboards
+  - [ ] Server-specific leaderboards
+  - [ ] Time-based leaderboards
 - [ ] Create team/squad performance commands
 - [ ] Add weapon/vehicle usage stats
 
