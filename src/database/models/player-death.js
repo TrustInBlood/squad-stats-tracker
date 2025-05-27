@@ -49,14 +49,14 @@ module.exports = (sequelize) => {
     },
     victimSteamID: {
       type: DataTypes.STRING(17),
-      allowNull: false,
+      allowNull: true,
       index: true,
-      comment: 'Steam ID of the victim'
+      comment: 'Steam ID of the victim (null for environmental death)'
     },
     victimEOSID: {
       type: DataTypes.STRING(32),
-      allowNull: false,
-      comment: 'EOS ID of the victim'
+      allowNull: true,
+      comment: 'EOS ID of the victim (null for environmental death)'
     },
     woundTime: {
       type: DataTypes.DATE,
@@ -76,8 +76,8 @@ module.exports = (sequelize) => {
     },
     victimTeamID: {
       type: DataTypes.INTEGER,
-      allowNull: false,
-      comment: 'Team ID of the victim'
+      allowNull: true,
+      comment: 'Team ID of the victim (null for environmental death)'
     },
     rawData: {
       type: DataTypes.JSON,
