@@ -1,7 +1,7 @@
 require('dotenv').config();
 const { Client, GatewayIntentBits, Collection } = require('discord.js');
 const logger = require('./utils/logger');
-const { testConnection } = require('./config/database');
+const { initializeDatabase } = require('./database/init');
 const ServerManager = require('./utils/serverManager');
 
 // Create a new client instance
@@ -20,12 +20,12 @@ client.commands = new Collection();
 // Create server manager instance
 const serverManager = new ServerManager();
 
-// Test database connection and load commands/events regardless of result
+// Initialize database and load commands/events
 Promise.all([
-    testConnection(),
+    initializeDatabase(),
     serverManager.connectToAllServers()
-]).then(([dbConnected, _]) => {
-    if (!dbConnected) {
+]).then(([dbInitialized, _]) => {
+    if (!dbInitialized) {
         logger.warn('Bot is running in degraded mode - database features will be unavailable');
     }
     // Load commands and events
