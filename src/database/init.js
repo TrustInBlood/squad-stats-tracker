@@ -1,6 +1,6 @@
 const { Sequelize } = require('sequelize');
 const logger = require('../utils/logger');
-const sequelize = require('./config/database').sequelize;
+const { sequelize } = require('./config/database');
 
 async function runMigrations() {
     try {
