@@ -2,6 +2,7 @@ const logger = require('./logger');
 const fs = require('fs').promises;
 const path = require('path');
 const { PlayerDamage, PlayerWound, PlayerDeath, PlayerRevive, Player, sequelize } = require('../database/models');
+const { Op } = require('sequelize');
 
 class EventBuffer {
     constructor(options = {}) {
@@ -184,7 +185,7 @@ class EventBuffer {
                 // Try to find existing player by steamID or eosID
                 const [playerRecord, created] = await Player.findOrCreate({
                     where: {
-                        [sequelize.Op.or]: [
+                        [Op.or]: [
                             { steamID: steamID || null },
                             { eosID: eosID || null }
                         ]
@@ -241,7 +242,7 @@ class EventBuffer {
                 // Find player by steamID or eosID
                 const playerRecord = await Player.findOne({
                     where: {
-                        [sequelize.Op.or]: [
+                        [Op.or]: [
                             { steamID: steamID || null },
                             { eosID: eosID || null }
                         ]
