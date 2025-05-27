@@ -1,12 +1,20 @@
-// This file will export all models
-// Example:
-// const Player = require('./player');
-// const Match = require('./match');
-// 
-// module.exports = {
-//   Player,
-//   Match,
-// };
+// database/index.js
+const Player = require('./player');
+const Server = require('./server');
+const PlayerDamage = require('./player-damage');
+const PlayerDeath = require('./player-death');
+const PlayerWound = require('./player-wound');
+const PlayerRevive = require('./player-revive');
 
-// For now, we'll export an empty object until we create our models
-module.exports = {}; 
+module.exports = {
+  Player,
+  Server,
+  PlayerDamage,
+  PlayerDeath,
+  PlayerWound,
+  PlayerRevive,
+  // More models will be added here as we create them
+  // DiscordSteamLink,
+  // DailyPlayerStats,
+  // etc.
+};
