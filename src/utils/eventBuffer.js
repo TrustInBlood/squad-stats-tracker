@@ -173,13 +173,16 @@ class EventBuffer {
 
         for (const event of events) {
             try {
-                const { steamID, eosID, name } = event;
+                const player = event.data?.player || {};
+                const steamID = player.steamID;
+                const eosID = player.eosID;
+                const name = player.name;
                 if (!steamID && !eosID) {
                     throw new Error('Player must have either steamID or eosID');
                 }
 
                 // Try to find existing player by steamID or eosID
-                const [player, created] = await Player.findOrCreate({
+                const [playerRecord, created] = await Player.findOrCreate({
                     where: {
                         [sequelize.Op.or]: [
                             { steamID: steamID || null },
@@ -198,7 +201,7 @@ class EventBuffer {
 
                 if (!created) {
                     // Update existing player
-                    await player.update({
+                    await playerRecord.update({
                         lastKnownName: name,
                         isActive: true,
                         lastSeen: new Date()
@@ -228,13 +231,15 @@ class EventBuffer {
 
         for (const event of events) {
             try {
-                const { steamID, eosID } = event;
+                const player = event.data?.player || {};
+                const steamID = player.steamID;
+                const eosID = player.eosID;
                 if (!steamID && !eosID) {
                     throw new Error('Player must have either steamID or eosID');
                 }
 
                 // Find player by steamID or eosID
-                const player = await Player.findOne({
+                const playerRecord = await Player.findOne({
                     where: {
                         [sequelize.Op.or]: [
                             { steamID: steamID || null },
@@ -244,8 +249,8 @@ class EventBuffer {
                     transaction
                 });
 
-                if (player) {
-                    await player.update({
+                if (playerRecord) {
+                    await playerRecord.update({
                         isActive: false,
                         lastSeen: new Date()
                     }, { transaction });
