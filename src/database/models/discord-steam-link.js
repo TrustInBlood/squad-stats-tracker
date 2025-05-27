@@ -16,7 +16,7 @@ module.exports = (sequelize) => {
     },
     steamID: {
       type: DataTypes.STRING(17),
-      allowNull: false,
+      allowNull: true,
       index: true,
       comment: 'Steam ID linked to this Discord account'
     },
@@ -120,31 +120,37 @@ module.exports = (sequelize) => {
   };
 
   // Create a new link request
-  DiscordSteamLink.createLinkRequest = async function(discordID, steamID) {
+  DiscordSteamLink.createLinkRequest = async function(discordID) {
     try {
       const verificationCode = this.generateVerificationCode();
       const expiresAt = new Date(Date.now() + (15 * 60 * 1000)); // 15 minutes
 
-      // Check if this exact link already exists
-      const existingLink = await this.findOne({
-        where: { discordID, steamID }
+      // Check if user has any pending verification requests
+      const existingPendingLink = await this.findOne({
+        where: { 
+          discordID,
+          isVerified: false,
+          verificationExpires: {
+            [sequelize.Sequelize.Op.gt]: new Date()
+          }
+        }
       });
 
-      if (existingLink) {
-        // Update existing link with new verification code
-        await existingLink.update({
+      if (existingPendingLink) {
+        // Update existing pending link with new verification code
+        await existingPendingLink.update({
           verificationCode,
           verificationExpires: expiresAt,
-          isVerified: false
+          steamID: null // Reset Steam ID in case it was partially set
         });
         
-        return { link: existingLink, isNew: false, error: null };
+        return { link: existingPendingLink, isNew: false, error: null };
       }
 
       // Create new link request
       const link = await this.create({
         discordID,
-        steamID,
+        steamID: null, // Will be set during verification
         verificationCode,
         verificationExpires: expiresAt,
         isVerified: false,
@@ -162,8 +168,12 @@ module.exports = (sequelize) => {
   };
 
   // Verify a link using the code
-  DiscordSteamLink.verifyLink = async function(verificationCode, serverID = null) {
+  DiscordSteamLink.verifyLink = async function(verificationCode, serverID, steamID) {
     try {
+      if (!steamID) {
+        return { success: false, link: null, error: 'Steam ID is required for verification' };
+      }
+
       const link = await this.findOne({
         where: {
           verificationCode,
@@ -178,14 +188,42 @@ module.exports = (sequelize) => {
         return { success: false, link: null, error: 'Invalid or expired verification code' };
       }
 
-      // Set all previous links for this Discord user to inactive (but keep them for tracking)
+      // Check if this Steam ID is already linked to another Discord account
+      const existingLink = await this.findOne({
+        where: {
+          steamID,
+          isVerified: true,
+          discordID: {
+            [sequelize.Sequelize.Op.ne]: link.discordID // Not equal to current user
+          }
+        }
+      });
+
+      if (existingLink) {
+        // Create a hidden link for admin tracking
+        await this.createAdminLink(
+          link.discordID,
+          steamID,
+          'medium',
+          `Auto-detected alt account. Original link: ${existingLink.discordID}`,
+          true
+        );
+        return { 
+          success: false, 
+          link: null, 
+          error: 'This Steam account is already linked to another Discord account. An admin has been notified.' 
+        };
+      }
+
+      // Set all previous links for this Discord user to inactive
       await this.update(
         { isActive: false },
         { where: { discordID: link.discordID } }
       );
 
-      // Activate and verify this link (becomes the new "active" one user sees)
+      // Activate and verify this link
       await link.update({
+        steamID, // Set the Steam ID during verification
         isVerified: true,
         isActive: true,
         verifiedAt: new Date(),

@@ -21,7 +21,8 @@ class EventBuffer {
             PLAYER_DIED: [],
             PLAYER_REVIVED: [],
             PLAYER_CONNECTED: [],    // Track player connections
-            PLAYER_DISCONNECTED: []  // Track player disconnections
+            PLAYER_DISCONNECTED: [], // Track player disconnections
+            PLAYER_CHAT: []          // Track chat messages for verification
         };
 
         // Timestamps for each buffer's last flush
@@ -31,7 +32,8 @@ class EventBuffer {
             PLAYER_DIED: Date.now(),
             PLAYER_REVIVED: Date.now(),
             PLAYER_CONNECTED: Date.now(),
-            PLAYER_DISCONNECTED: Date.now()
+            PLAYER_DISCONNECTED: Date.now(),
+            PLAYER_CHAT: Date.now()
         };
 
         // Track retry attempts and delays for each event type
@@ -126,6 +128,11 @@ class EventBuffer {
                 case 'PLAYER_DISCONNECTED':
                     result = await this.handlePlayerDisconnections(eventsToProcess, transaction);
                     break;
+                case 'PLAYER_CHAT':
+                    // Chat events are handled in real-time by the chat verification handler
+                    // We just need to clear the buffer
+                    result = { successful: eventsToProcess.length, failed: 0, errors: [] };
+                    break;
             }
 
             await transaction.commit();
@@ -145,22 +152,21 @@ class EventBuffer {
             await transaction.rollback();
             logger.error(`Error flushing ${eventType} buffer:`, error);
 
-            // Put the events back in the buffer BEFORE scheduling retry
-            buffer.unshift(...eventsToProcess);
-
-            // Implement exponential backoff for retries
-            const retryCount = (this.retryCounts[eventType] || 0) + 1;
-            this.retryCounts[eventType] = retryCount;
-
-            if (retryCount <= this.options.maxRetries) {
-                const delay = Math.min(1000 * Math.pow(2, retryCount - 1), 30000); // Max 30s
-                logger.info(`Scheduling retry for ${eventType} in ${delay}ms (attempt ${retryCount}/${this.options.maxRetries})`);
-                setTimeout(() => this.flushBuffer(eventType), delay);
+            // Handle retries
+            this.retryCounts[eventType] = (this.retryCounts[eventType] || 0) + 1;
+            if (this.retryCounts[eventType] <= this.options.maxRetries) {
+                // Exponential backoff
+                this.retryDelays[eventType] = Math.min(30000, 1000 * Math.pow(2, this.retryCounts[eventType]));
+                logger.info(`Scheduling retry for ${eventType} in ${this.retryDelays[eventType]/1000} seconds`);
+                
+                // Put events back in buffer
+                buffer.push(...eventsToProcess);
+                
+                // Schedule retry
+                setTimeout(() => this.flushBuffer(eventType), this.retryDelays[eventType]);
             } else {
-                // Move to dead letter queue after max retries
-                logger.error(`Max retries (${this.options.maxRetries}) reached for ${eventType}, moving to dead letter queue`);
-                await this.writeToDeadLetterQueue(eventType, eventsToProcess);
-                buffer.length = 0; // Clear buffer since we moved to dead letter queue
+                // Move to dead letter queue
+                await this.moveToDeadLetter(eventType, eventsToProcess, error);
             }
         }
     }

@@ -1,5 +1,6 @@
 const logger = require('../utils/logger');
 const ServerManager = require('../utils/serverManager');
+const ChatVerificationHandler = require('../handlers/chat-verification');
 
 // Create a single server manager instance for the bot
 const serverManager = new ServerManager();
@@ -19,6 +20,11 @@ module.exports = {
             }],
             status: 'online'
         });
+
+        // Initialize chat verification handler
+        const chatVerificationHandler = new ChatVerificationHandler(client);
+        serverManager.setChatVerificationHandler(chatVerificationHandler);
+        logger.info('Chat verification handler initialized');
 
         // Initialize server manager
         try {

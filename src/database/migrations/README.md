@@ -1,126 +1,123 @@
 # Database Migrations
 
-This directory contains database migration files that help manage database schema changes over time using Sequelize.
-
-## Migration File Naming Convention
-
-Migrations are automatically named by Sequelize using the following format:
-`YYYYMMDDHHMMSS-migration-name.js`
-
-Example: `20240315120000-create-players-table.js`
+This directory contains all database migrations for the Squad Stats Tracker bot.
 
 ## Running Migrations
 
-To run migrations, you'll need to:
+There are two ways to run migrations:
 
-1. Install the required dependencies:
+1. **Automatic Migration (Recommended)**
+   - Migrations run automatically when the bot starts
+   - This is handled by `src/database/init.js`
+   - No manual action required
+
+2. **Manual Migration**
+   - If you need to run migrations without starting the bot:
+   ```bash
+   npm run db:migrate
+   ```
+   - This uses the same migration system as the bot but runs independently
+   - Useful for testing migrations or running them in CI/CD
+
+## Migration Files
+
+Migration files are named with a timestamp prefix to ensure proper ordering:
+```
+YYYYMMDDHHMMSS-description.js
+```
+
+## Creating New Migrations
+
+To create a new migration:
 ```bash
-npm install sequelize mariadb sequelize-cli
+npm run migrate:create -- --name description-of-changes
 ```
 
-2. Add these scripts to your package.json:
-```json
-{
-  "scripts": {
-    "migrate": "sequelize-cli db:migrate",
-    "migrate:undo": "sequelize-cli db:migrate:undo",
-    "migrate:undo:all": "sequelize-cli db:migrate:undo:all",
-    "migrate:create": "sequelize-cli migration:create"
-  }
-}
-```
+## Rolling Back Migrations
 
-3. Create a new migration:
-```bash
-npm run migrate:create -- --name descriptive_name
-```
-
-4. Run migrations:
-```bash
-npm run migrate
-```
-
-5. Undo the last migration:
+To undo the last migration:
 ```bash
 npm run migrate:undo
 ```
 
-6. Undo all migrations:
+To undo all migrations:
 ```bash
 npm run migrate:undo:all
 ```
 
-## Migration File Structure
+## Migration Format
 
-Each migration file should export two functions:
+Each migration file should export an object with `up` and `down` methods:
 
 ```javascript
 'use strict';
 
+const { DataTypes } = require('sequelize');
+
+/** @type {import('sequelize-cli').Migration} */
 module.exports = {
-  up: async (queryInterface, Sequelize) => {
+  async up(queryInterface, Sequelize) {
     // Migration code here
-    // Example:
-    // await queryInterface.createTable('players', {
-    //   id: {
-    //     allowNull: false,
-    //     autoIncrement: true,
-    //     primaryKey: true,
-    //     type: Sequelize.INTEGER
-    //   },
-    //   name: {
-    //     type: Sequelize.STRING,
-    //     allowNull: false
-    //   },
-    //   createdAt: {
-    //     allowNull: false,
-    //     type: Sequelize.DATE,
-    //     defaultValue: Sequelize.literal('CURRENT_TIMESTAMP')
-    //   },
-    //   updatedAt: {
-    //     allowNull: false,
-    //     type: Sequelize.DATE,
-    //     defaultValue: Sequelize.literal('CURRENT_TIMESTAMP')
-    //   }
-    // });
   },
 
-  down: async (queryInterface, Sequelize) => {
+  async down(queryInterface, Sequelize) {
     // Rollback code here
-    // Example:
-    // await queryInterface.dropTable('players');
   }
 };
 ```
 
-## Sequelize Configuration
+## Best Practices
 
-Create a `.sequelizerc` file in your project root to configure Sequelize CLI:
+1. Always include both `up` and `down` methods
+2. Use `DataTypes` from sequelize for column types
+3. Include comments for all columns
+4. Test both migration and rollback
+5. Keep migrations focused and atomic
+6. Use descriptive names for migrations
+7. Include indexes where appropriate
+8. Handle both the migration and its rollback safely
 
+## Common Operations
+
+### Adding a Column
 ```javascript
-const path = require('path');
+await queryInterface.addColumn('table_name', 'column_name', {
+  type: DataTypes.STRING(50),
+  allowNull: false,
+  comment: 'Description of the column'
+});
+```
 
-module.exports = {
-  'config': path.resolve('src/database', 'config.js'),
-  'models-path': path.resolve('src/database', 'models'),
-  'seeders-path': path.resolve('src/database', 'seeders'),
-exports.up = pgm => {
-  // Migration code here
-  // Example:
-  // pgm.createTable('players', {
-  //   id: 'id',
-  //   name: { type: 'varchar(255)', notNull: true },
-  //   created_at: {
-  //     type: 'timestamp',
-  //     notNull: true,
-  //     default: pgm.func('current_timestamp'),
-  //   },
-  // });
-};
+### Modifying a Column
+```javascript
+await queryInterface.changeColumn('table_name', 'column_name', {
+  type: DataTypes.STRING(100),
+  allowNull: true,
+  comment: 'Updated description'
+});
+```
 
-exports.down = pgm => {
-  // Rollback code here
-  // Example:
-  // pgm.dropTable('players');
-};
-``` 
+### Adding an Index
+```javascript
+await queryInterface.addIndex('table_name', ['column_name'], {
+  name: 'idx_table_column'
+});
+```
+
+### Removing a Column
+```javascript
+await queryInterface.removeColumn('table_name', 'column_name');
+```
+
+## Troubleshooting
+
+If you encounter issues with migrations:
+
+1. Check the migration file format matches the template
+2. Ensure all required fields are present
+3. Verify the rollback method works
+4. Check for any data dependencies
+5. Look for circular references
+6. Verify database connection settings
+
+For more help, see the [Sequelize Migration Documentation](https://sequelize.org/docs/v6/other-topics/migrations/). 

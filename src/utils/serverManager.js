@@ -21,6 +21,9 @@ class ServerManager extends EventEmitter {
             maxAge: 10000 // Maximum age of events in buffer (10 seconds)
         });
 
+        // Add chat verification handler
+        this.chatVerificationHandler = null;
+
         this.loadConfig();
 
         // Start monitoring buffer sizes
@@ -321,9 +324,33 @@ class ServerManager extends EventEmitter {
                         // Add player connection data to debug logs
                         steamID: data.steamID,
                         eosID: data.eosID,
-                        name: data.name
+                        name: data.name,
+                        // Add chat message data
+                        message: data.event === 'PLAYER_CHAT' ? data.message : undefined
                     }
                 });
+            }
+
+            // Always handle chat events for verification, regardless of logStats setting
+            if (data.event === 'PLAYER_CHAT') {
+                const eventData = {
+                    event: data.event,
+                    serverID: serverId,
+                    timestamp: new Date().toISOString(),
+                    data: data
+                };
+
+                // Process chat for verification if handler exists
+                if (this.chatVerificationHandler) {
+                    this.chatVerificationHandler.handleChatMessage(eventData);
+                }
+
+                // If logStats is enabled, also buffer the chat event
+                if (server.config.logStats) {
+                    this.eventBuffer.addEvent(eventData);
+                    this.emit(data.event, eventData);
+                }
+                return;
             }
 
             // Handle connection-related events
@@ -342,7 +369,7 @@ class ServerManager extends EventEmitter {
                 return;
             }
 
-            // For game events, check if we should log stats for this server
+            // For other game events, check if we should log stats for this server
             if (server.config.logStats) {
                 // Structure event data consistently
                 const eventData = {
@@ -361,6 +388,11 @@ class ServerManager extends EventEmitter {
         } catch (error) {
             logger.error(`Error handling message from server ${serverId}:`, error);
         }
+    }
+
+    // Add method to set chat verification handler
+    setChatVerificationHandler(handler) {
+        this.chatVerificationHandler = handler;
     }
 }
 
