@@ -1,6 +1,26 @@
 // database/player.js
 const { DataTypes } = require('sequelize');
 
+// Helper function to sanitize player names
+function sanitizePlayerName(name) {
+    if (!name) return null;
+    
+    // Truncate to 50 characters (database limit)
+    let sanitized = name.slice(0, 50);
+    
+    // Remove control characters and other problematic Unicode
+    sanitized = sanitized.replace(/[\x00-\x1F\x7F-\x9F]/g, '');
+    
+    // Replace zero-width characters
+    sanitized = sanitized.replace(/[\u200B-\u200D\uFEFF]/g, '');
+    
+    // Replace invalid surrogate pairs
+    sanitized = sanitized.replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]?/g, '');
+    
+    // If the name is empty after sanitization, return null
+    return sanitized.trim() || null;
+}
+
 module.exports = (sequelize) => {
   const Player = sequelize.define('Player', {
     id: {
@@ -25,7 +45,11 @@ module.exports = (sequelize) => {
     lastKnownName: {
       type: DataTypes.STRING(50),
       allowNull: true,
-      comment: 'Last known player name in game'
+      comment: 'Last known player name in game',
+      set(value) {
+        // Sanitize the name before setting
+        this.setDataValue('lastKnownName', sanitizePlayerName(value));
+      }
     },
     firstSeen: {
       type: DataTypes.DATE,
@@ -40,6 +64,8 @@ module.exports = (sequelize) => {
   }, {
     timestamps: true, // Adds createdAt and updatedAt
     tableName: 'players',
+    charset: 'utf8mb4',
+    collate: 'utf8mb4_unicode_ci',
     indexes: [
       {
         name: 'idx_player_steam_id',
@@ -58,8 +84,9 @@ module.exports = (sequelize) => {
 
   // Instance methods
   Player.prototype.updateName = function(newName) {
-    if (this.lastKnownName !== newName) {
-      return this.update({ lastKnownName: newName });
+    const sanitizedName = sanitizePlayerName(newName);
+    if (this.lastKnownName !== sanitizedName) {
+      return this.update({ lastKnownName: sanitizedName });
     }
     return Promise.resolve(this);
   };
@@ -79,20 +106,21 @@ module.exports = (sequelize) => {
     }
 
     try {
+      const sanitizedName = sanitizePlayerName(playerData.name);
       const [player, created] = await this.findOrCreate({
         where: { steamID: playerData.steamID },
         defaults: {
           steamID: playerData.steamID,
           eosID: playerData.eosID,
-          lastKnownName: playerData.name,
+          lastKnownName: sanitizedName,
           firstSeen: new Date(),
           isActive: true
         }
       });
 
       // Update name if this is an existing player and name changed
-      if (!created && playerData.name && player.lastKnownName !== playerData.name) {
-        await player.update({ lastKnownName: playerData.name });
+      if (!created && sanitizedName && player.lastKnownName !== sanitizedName) {
+        await player.update({ lastKnownName: sanitizedName });
       }
 
       return { player, created, error: null };

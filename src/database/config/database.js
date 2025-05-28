@@ -16,6 +16,19 @@ const config = {
       min: 0,
       acquire: 30000,
       idle: 10000
+    },
+    dialectOptions: {
+      charset: 'utf8mb4',
+      collate: 'utf8mb4_unicode_ci',
+      // Enable strict mode but allow invalid dates
+      sql_mode: 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'
+    },
+    define: {
+      charset: 'utf8mb4',
+      collate: 'utf8mb4_unicode_ci',
+      timestamps: true,
+      underscored: false,
+      freezeTableName: true
     }
   },
   test: {
@@ -31,6 +44,17 @@ const config = {
       min: 0,
       acquire: 30000,
       idle: 10000
+    },
+    dialectOptions: {
+      charset: 'utf8mb4',
+      collate: 'utf8mb4_unicode_ci'
+    },
+    define: {
+      charset: 'utf8mb4',
+      collate: 'utf8mb4_unicode_ci',
+      timestamps: true,
+      underscored: false,
+      freezeTableName: true
     }
   },
   production: {
@@ -46,6 +70,19 @@ const config = {
       min: 2,
       acquire: 30000,
       idle: 10000
+    },
+    dialectOptions: {
+      charset: 'utf8mb4',
+      collate: 'utf8mb4_unicode_ci',
+      // Enable strict mode but allow invalid dates
+      sql_mode: 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'
+    },
+    define: {
+      charset: 'utf8mb4',
+      collate: 'utf8mb4_unicode_ci',
+      timestamps: true,
+      underscored: false,
+      freezeTableName: true
     }
   }
 };
@@ -54,7 +91,7 @@ const config = {
 const env = process.env.NODE_ENV || 'development';
 const currentConfig = config[env];
 
-// Create Sequelize instance
+// Create Sequelize instance with proper charset configuration
 const sequelize = new Sequelize(
   currentConfig.database,
   currentConfig.username,
@@ -65,12 +102,8 @@ const sequelize = new Sequelize(
     dialect: currentConfig.dialect,
     logging: currentConfig.logging,
     pool: currentConfig.pool,
-    define: {
-      timestamps: true, // Adds createdAt and updatedAt timestamps
-      underscored: false, // Don't use snake_case for fields
-      freezeTableName: true, // Don't pluralize table names
-      underscoredAll: false // Don't use snake_case for column names
-    }
+    dialectOptions: currentConfig.dialectOptions,
+    define: currentConfig.define
   }
 );
 

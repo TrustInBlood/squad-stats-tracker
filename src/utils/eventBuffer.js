@@ -4,6 +4,71 @@ const path = require('path');
 const { PlayerDamage, PlayerWound, PlayerDeath, PlayerRevive, Player, sequelize } = require('../database/models');
 const { Op } = require('sequelize');
 
+// Helper function to sanitize player names
+function sanitizePlayerName(name) {
+    if (!name) return null;
+    
+    // Truncate to 50 characters (database limit)
+    let sanitized = name.slice(0, 50);
+    
+    // Remove control characters and other problematic Unicode
+    sanitized = sanitized.replace(/[\x00-\x1F\x7F-\x9F]/g, '');
+    
+    // Replace zero-width characters
+    sanitized = sanitized.replace(/[\u200B-\u200D\uFEFF]/g, '');
+    
+    // Replace invalid surrogate pairs
+    sanitized = sanitized.replace(/[\uD800-\uDBFF][\uDC00-\uDFFF]?/g, '');
+    
+    // If the name is empty after sanitization, return null
+    return sanitized.trim() || null;
+}
+
+// Helper function to extract player data from event
+function extractPlayerData(event) {
+    const result = {
+        steamID: null,
+        eosID: null,
+        name: null,
+        timestamp: event.timestamp ? new Date(event.timestamp) : new Date()
+    };
+
+    // Try to get data from player object first
+    const player = event.data?.player;
+    if (player) {
+        result.steamID = player.steamID;
+        result.eosID = player.eosID;
+        result.name = sanitizePlayerName(player.name);
+    }
+
+    // If no IDs found, try to extract from raw log
+    if ((!result.steamID && !result.eosID) && event.data?.raw) {
+        const rawLog = event.data.raw;
+        
+        // Try to extract EOS ID - handles both formats:
+        // 1. "UniqueId: RedpointEOS:0002d7d5d9bb4ebc811716ee243201a3"
+        // 2. "UniqueId: 0002d7d5d9bb4ebc811716ee243201a3"
+        const eosMatch = rawLog.match(/UniqueId:\s*(?:RedpointEOS:)?([a-f0-9]{32})/i);
+        if (eosMatch) {
+            result.eosID = eosMatch[1]; // Just the hex part
+        }
+
+        // Try to extract Steam ID
+        const steamMatch = rawLog.match(/SteamID:\s*(\d+)/i);
+        if (steamMatch) {
+            result.steamID = steamMatch[1];
+        }
+
+        // Try to extract player name
+        const nameMatch = rawLog.match(/Name:\s*([^\n]+)/i);
+        if (nameMatch) {
+            result.name = sanitizePlayerName(nameMatch[1].trim());
+        }
+    }
+
+    return result;
+}
+
 class EventBuffer {
     constructor(options = {}) {
         this.options = {
@@ -56,22 +121,24 @@ class EventBuffer {
         }
     }
 
-    async writeToDeadLetterQueue(eventType, events) {
+    async writeToDeadLetterQueue(eventType, data) {
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
         const filename = `${eventType}_${timestamp}.json`;
         const filepath = path.join(this.options.deadLetterPath, filename);
 
         try {
-            const data = {
+            const deadLetterEntry = {
                 eventType,
                 timestamp: new Date().toISOString(),
-                count: events.length,
-                events
+                count: data.events.length,
+                events: data.events,
+                error: data.error
             };
-            await fs.writeFile(filepath, JSON.stringify(data, null, 2));
-            logger.warn(`Wrote ${events.length} failed ${eventType} events to dead letter queue: ${filename}`);
+            await fs.writeFile(filepath, JSON.stringify(deadLetterEntry, null, 2));
+            logger.warn(`Wrote ${data.events.length} failed ${eventType} events to dead letter queue: ${filename}`);
         } catch (error) {
             logger.error(`Failed to write to dead letter queue: ${filename}`, error);
+            throw error; // Re-throw to handle in the caller
         }
     }
 
@@ -106,85 +173,145 @@ class EventBuffer {
         buffer.length = 0; // Clear the buffer
         this.lastFlush[eventType] = Date.now();
 
-        const transaction = await sequelize.transaction();
-        try {
-            let result;
-            switch (eventType) {
-                case 'PLAYER_DAMAGED':
-                    result = await PlayerDamage.bulkCreateFromSquadEvents(eventsToProcess, { transaction });
-                    break;
-                case 'PLAYER_WOUNDED':
-                    result = await PlayerWound.bulkCreateFromSquadEvents(eventsToProcess, { transaction });
-                    break;
-                case 'PLAYER_DIED':
-                    result = await PlayerDeath.bulkCreateFromSquadEvents(eventsToProcess, { transaction });
-                    break;
-                case 'PLAYER_REVIVED':
-                    result = await PlayerRevive.bulkCreateFromSquadEvents(eventsToProcess, { transaction });
-                    break;
-                case 'PLAYER_CONNECTED':
-                    result = await this.handlePlayerConnections(eventsToProcess, transaction);
-                    break;
-                case 'PLAYER_DISCONNECTED':
-                    result = await this.handlePlayerDisconnections(eventsToProcess, transaction);
-                    break;
-                case 'PLAYER_CHAT':
-                    // Chat events are handled in real-time by the chat verification handler
-                    // We just need to clear the buffer
-                    result = { successful: eventsToProcess.length, failed: 0, errors: [] };
-                    break;
-            }
+        // Process events in smaller batches to prevent transaction timeouts
+        const BATCH_SIZE = 50;
+        const results = {
+            successful: 0,
+            failed: 0,
+            created: 0,
+            errors: []
+        };
 
-            await transaction.commit();
+        for (let i = 0; i < eventsToProcess.length; i += BATCH_SIZE) {
+            const batch = eventsToProcess.slice(i, i + BATCH_SIZE);
+            const transaction = await sequelize.transaction();
 
-            if (result) {
-                logger.debug(`Flushed ${result.successful} ${eventType} events to database`);
-                if (result.failed > 0) {
-                    logger.warn(`Failed to process ${result.failed} ${eventType} events:`, result.errors);
+            try {
+                let batchResult;
+                switch (eventType) {
+                    case 'PLAYER_DAMAGED':
+                        batchResult = await PlayerDamage.bulkCreateFromSquadEvents(batch, { transaction });
+                        break;
+                    case 'PLAYER_WOUNDED':
+                        batchResult = await PlayerWound.bulkCreateFromSquadEvents(batch, { transaction });
+                        break;
+                    case 'PLAYER_DIED':
+                        batchResult = await PlayerDeath.bulkCreateFromSquadEvents(batch, { transaction });
+                        break;
+                    case 'PLAYER_REVIVED':
+                        batchResult = await PlayerRevive.bulkCreateFromSquadEvents(batch, { transaction });
+                        break;
+                    case 'PLAYER_CONNECTED':
+                        batchResult = await this.handlePlayerConnections(batch, transaction);
+                        break;
+                    case 'PLAYER_DISCONNECTED':
+                        batchResult = await this.handlePlayerDisconnections(batch, transaction);
+                        break;
+                    case 'PLAYER_CHAT':
+                        // Chat events are handled in real-time
+                        batchResult = { successful: batch.length, failed: 0, errors: [] };
+                        break;
+                }
+
+                await transaction.commit();
+
+                // Aggregate results
+                if (batchResult) {
+                    results.successful += batchResult.successful || 0;
+                    results.failed += batchResult.failed || 0;
+                    results.created += batchResult.created || 0;
+                    if (batchResult.errors) {
+                        results.errors.push(...batchResult.errors);
+                    }
+                }
+
+                // Reset retry counters on successful batch
+                this.retryCounts[eventType] = 0;
+                this.retryDelays[eventType] = 0;
+
+            } catch (error) {
+                await transaction.rollback();
+                logger.error(`Error processing batch of ${eventType} events:`, error);
+
+                // Handle retries for this batch
+                this.retryCounts[eventType] = (this.retryCounts[eventType] || 0) + 1;
+                if (this.retryCounts[eventType] <= this.options.maxRetries) {
+                    // Exponential backoff
+                    this.retryDelays[eventType] = Math.min(30000, 1000 * Math.pow(2, this.retryCounts[eventType]));
+                    logger.info(`Scheduling retry for batch of ${eventType} in ${this.retryDelays[eventType]/1000} seconds`);
+                    
+                    // Put batch back in buffer
+                    buffer.push(...batch);
+                    
+                    // Schedule retry
+                    setTimeout(() => this.flushBuffer(eventType), this.retryDelays[eventType]);
+                } else {
+                    // Move failed batch to dead letter queue with error information
+                    const deadLetterData = {
+                        events: batch,
+                        error: {
+                            message: error.message,
+                            stack: error.stack,
+                            code: error.code,
+                            retryCount: this.retryCounts[eventType],
+                            lastAttempt: new Date().toISOString()
+                        }
+                    };
+                    
+                    try {
+                        await this.writeToDeadLetterQueue(eventType, deadLetterData);
+                        logger.warn(`Moved ${batch.length} failed ${eventType} events to dead letter queue after ${this.retryCounts[eventType]} retries`, {
+                            error: error.message,
+                            batchSize: batch.length,
+                            serverID: batch[0]?.serverID,
+                            timestamp: batch[0]?.timestamp
+                        });
+                    } catch (dlqError) {
+                        logger.error(`Failed to write to dead letter queue for ${eventType}:`, {
+                            error: dlqError.message,
+                            originalError: error.message,
+                            batchSize: batch.length
+                        });
+                    }
+                    
+                    results.failed += batch.length;
+                    results.errors.push({
+                        batch,
+                        error: error.message,
+                        retryCount: this.retryCounts[eventType]
+                    });
                 }
             }
-
-            // Reset retry counters on successful flush
-            this.retryCounts[eventType] = 0;
-            this.retryDelays[eventType] = 0;
-
-        } catch (error) {
-            await transaction.rollback();
-            logger.error(`Error flushing ${eventType} buffer:`, error);
-
-            // Handle retries
-            this.retryCounts[eventType] = (this.retryCounts[eventType] || 0) + 1;
-            if (this.retryCounts[eventType] <= this.options.maxRetries) {
-                // Exponential backoff
-                this.retryDelays[eventType] = Math.min(30000, 1000 * Math.pow(2, this.retryCounts[eventType]));
-                logger.info(`Scheduling retry for ${eventType} in ${this.retryDelays[eventType]/1000} seconds`);
-                
-                // Put events back in buffer
-                buffer.push(...eventsToProcess);
-                
-                // Schedule retry
-                setTimeout(() => this.flushBuffer(eventType), this.retryDelays[eventType]);
-            } else {
-                // Move to dead letter queue
-                await this.moveToDeadLetter(eventType, eventsToProcess, error);
-            }
         }
+
+        // Log summary of the flush operation
+        if (results.failed > 0 || results.created > 0) {
+            logger.info(`${eventType} flush summary:`, {
+                total: eventsToProcess.length,
+                successful: results.successful,
+                failed: results.failed,
+                created: results.created,
+                serverID: eventsToProcess[0]?.serverID,
+                timestamp: eventsToProcess[0]?.timestamp
+            });
+        }
+
+        return results;
     }
 
     async handlePlayerConnections(events, transaction) {
         const results = {
             successful: 0,
             failed: 0,
+            created: 0,
             errors: []
         };
 
         for (const event of events) {
             try {
-                const player = event.data?.player || {};
-                const steamID = player.steamID;
-                const eosID = player.eosID;
-                const name = player.name;
-                if (!steamID && !eosID) {
+                const playerData = extractPlayerData(event);
+                
+                if (!playerData.steamID && !playerData.eosID) {
                     throw new Error('Player must have either steamID or eosID');
                 }
 
@@ -192,26 +319,31 @@ class EventBuffer {
                 const [playerRecord, created] = await Player.findOrCreate({
                     where: {
                         [Op.or]: [
-                            { steamID: steamID || null },
-                            { eosID: eosID || null }
+                            { steamID: playerData.steamID || null },
+                            { eosID: playerData.eosID || null }
                         ]
                     },
                     defaults: {
-                        steamID: steamID || null,
-                        eosID: eosID || null,
-                        lastKnownName: name,
-                        firstSeen: new Date(),
-                        isActive: true
+                        steamID: playerData.steamID || null,
+                        eosID: playerData.eosID || null,
+                        lastKnownName: playerData.name,
+                        firstSeen: playerData.timestamp,
+                        isActive: true,
+                        lastSeen: playerData.timestamp
                     },
                     transaction
                 });
 
-                if (!created) {
-                    // Update existing player
+                if (created) {
+                    results.created++;
+                }
+
+                // Update existing player
+                if (!created || playerData.name) {
                     await playerRecord.update({
-                        lastKnownName: name,
+                        lastKnownName: playerData.name,
                         isActive: true,
-                        lastSeen: new Date()
+                        lastSeen: playerData.timestamp
                     }, { transaction });
                 }
 
@@ -222,7 +354,12 @@ class EventBuffer {
                     event,
                     error: error.message
                 });
-                logger.error('Error processing player connection:', error);
+                logger.error('Error processing player connection:', {
+                    error: error.message,
+                    event: event.event,
+                    serverID: event.serverID,
+                    timestamp: event.timestamp
+                });
             }
         }
 
@@ -233,40 +370,16 @@ class EventBuffer {
         const results = {
             successful: 0,
             failed: 0,
+            created: 0,
             errors: []
         };
 
         for (const event of events) {
             try {
-                let steamID = null;
-                let eosID = null;
-
-                // First try to get player data from the event
-                const player = event.data?.player;
-                if (player) {
-                    steamID = player.steamID;
-                    eosID = player.eosID;
-                }
-
-                // If no player data or no IDs found, try to extract from raw log data
-                if (!steamID && !eosID && event.data?.rawLog) {
-                    const rawLog = event.data.rawLog;
-                    
-                    // Try to extract EOS ID from raw log
-                    const eosMatch = rawLog.match(/UniqueId:\s*(RedpointEOS:[a-f0-9]+)/i);
-                    if (eosMatch) {
-                        eosID = eosMatch[1];
-                    }
-
-                    // Try to extract Steam ID from raw log if present
-                    const steamMatch = rawLog.match(/SteamID:\s*(\d+)/i);
-                    if (steamMatch) {
-                        steamID = steamMatch[1];
-                    }
-                }
+                const playerData = extractPlayerData(event);
 
                 // If we still don't have any player identification, log and skip
-                if (!steamID && !eosID) {
+                if (!playerData.steamID && !playerData.eosID) {
                     logger.warn('Could not extract player identification from disconnection event', {
                         event: event.event,
                         serverID: event.serverID,
@@ -281,39 +394,96 @@ class EventBuffer {
                     continue;
                 }
 
-                // Find player by steamID or eosID
-                const playerRecord = await Player.findOne({
+                // Try to find existing player record
+                let playerRecord = await Player.findOne({
                     where: {
                         [Op.or]: [
-                            { steamID: steamID || null },
-                            { eosID: eosID || null }
+                            { steamID: playerData.steamID || null },
+                            { eosID: playerData.eosID || null }
                         ]
                     },
                     transaction
                 });
 
+                // If player not found and we have enough data, create a new record
+                if (!playerRecord && (playerData.steamID || playerData.eosID)) {
+                    try {
+                        playerRecord = await Player.create({
+                            steamID: playerData.steamID || null,
+                            eosID: playerData.eosID || null,
+                            lastKnownName: playerData.name,
+                            firstSeen: playerData.timestamp,
+                            isActive: false, // Set to false since they're disconnecting
+                            lastSeen: playerData.timestamp
+                        }, { transaction });
+                        
+                        results.created++;
+                        logger.info('Created missing player record during disconnection', {
+                            steamID: playerData.steamID,
+                            eosID: playerData.eosID,
+                            playerID: playerRecord.id,
+                            serverID: event.serverID,
+                            timestamp: event.timestamp
+                        });
+                    } catch (createError) {
+                        logger.error('Failed to create missing player record during disconnection', {
+                            error: createError.message,
+                            steamID: playerData.steamID,
+                            eosID: playerData.eosID,
+                            serverID: event.serverID,
+                            timestamp: event.timestamp
+                        });
+                        // Don't increment failed count here - we'll try to continue with the update
+                    }
+                }
+
+                // Update player record if we have one (either found or created)
                 if (playerRecord) {
-                    await playerRecord.update({
-                        isActive: false,
-                        lastSeen: new Date()
-                    }, { transaction });
-                    results.successful++;
-                    logger.debug('Updated player disconnection status', {
-                        steamID,
-                        eosID,
-                        playerID: playerRecord.id
-                    });
+                    try {
+                        await playerRecord.update({
+                            isActive: false,
+                            lastSeen: playerData.timestamp,
+                            // Only update name if we have one and it's different
+                            ...(playerData.name && playerRecord.lastKnownName !== playerData.name && {
+                                lastKnownName: playerData.name
+                            })
+                        }, { transaction });
+                        
+                        results.successful++;
+                        logger.debug('Updated player disconnection status', {
+                            steamID: playerData.steamID,
+                            eosID: playerData.eosID,
+                            playerID: playerRecord.id,
+                            serverID: event.serverID,
+                            timestamp: event.timestamp
+                        });
+                    } catch (updateError) {
+                        logger.error('Failed to update player record during disconnection', {
+                            error: updateError.message,
+                            steamID: playerData.steamID,
+                            eosID: playerData.eosID,
+                            playerID: playerRecord.id,
+                            serverID: event.serverID,
+                            timestamp: event.timestamp
+                        });
+                        results.failed++;
+                        results.errors.push({
+                            event,
+                            error: `Update failed: ${updateError.message}`
+                        });
+                    }
                 } else {
-                    logger.warn('Player not found for disconnection event', {
-                        steamID,
-                        eosID,
+                    // If we couldn't find or create a player record
+                    logger.warn('Could not find or create player record for disconnection', {
+                        steamID: playerData.steamID,
+                        eosID: playerData.eosID,
                         serverID: event.serverID,
                         timestamp: event.timestamp
                     });
                     results.failed++;
                     results.errors.push({
                         event,
-                        error: 'Player not found in database'
+                        error: 'Could not find or create player record'
                     });
                 }
             } catch (error) {
