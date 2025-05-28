@@ -1,4 +1,4 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, InteractionResponseFlags } = require('discord.js');
 const logger = require('../utils/logger');
 
 module.exports = {
@@ -22,7 +22,10 @@ module.exports = {
             logger.error('Error executing ping command:', error);
             // If we haven't replied yet, send a new reply
             if (!interaction.replied && !interaction.deferred) {
-                await interaction.reply({ content: 'There was an error executing this command!', ephemeral: true });
+                await interaction.reply({ 
+                    content: 'There was an error executing this command!', 
+                    flags: [InteractionResponseFlags.Ephemeral] 
+                });
             } else {
                 // If we have replied, try to edit the reply
                 await interaction.editReply('There was an error executing this command!');

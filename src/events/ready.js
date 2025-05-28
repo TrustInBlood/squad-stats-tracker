@@ -23,6 +23,7 @@ module.exports = {
 
         // Initialize chat verification handler
         const chatVerificationHandler = new ChatVerificationHandler(client);
+        client.chatVerificationHandler = chatVerificationHandler;  // Attach to client
         serverManager.setChatVerificationHandler(chatVerificationHandler);
         logger.info('Chat verification handler initialized');
 

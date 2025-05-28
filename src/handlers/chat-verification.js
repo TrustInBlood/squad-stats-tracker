@@ -143,10 +143,41 @@ class ChatVerificationHandler {
                     logger.debug('Successfully updated verification message');
                 } catch (error) {
                     logger.error('Failed to update verification message', { error });
+                    // If we can't edit the original message, try to send a new one
+                    try {
+                        const channel = await this.client.channels.fetch(interaction.channelId);
+                        if (channel) {
+                            await channel.send({ 
+                                content: `<@${link.discordID}> Your account has been successfully linked!`,
+                                embeds: [embed]
+                            });
+                        }
+                    } catch (sendError) {
+                        logger.error('Failed to send new verification message', { error: sendError });
+                    }
                 }
                 this.pendingVerifications.delete(code);
             } else {
                 logger.warn('No interaction found for successful verification', { code });
+                // Try to send a new message to the user
+                try {
+                    const user = await this.client.users.fetch(link.discordID);
+                    if (user) {
+                        const embed = new EmbedBuilder()
+                            .setColor('#00ff00')
+                            .setTitle('Account Link Verified!')
+                            .setDescription('Your Discord account has been successfully linked with your Squad account.')
+                            .addFields(
+                                { name: 'Steam ID', value: link.steamID },
+                                { name: 'Verified On', value: new Date().toLocaleString() },
+                                { name: 'Server', value: serverID }
+                            );
+                        await user.send({ embeds: [embed] });
+                        logger.info('Sent DM to user about successful verification', { discordID: link.discordID });
+                    }
+                } catch (dmError) {
+                    logger.error('Failed to send DM about successful verification', { error: dmError, discordID: link.discordID });
+                }
             }
 
             logger.info(`Successfully verified link for Discord user ${link.discordID} with Steam ID ${steamID}`);
