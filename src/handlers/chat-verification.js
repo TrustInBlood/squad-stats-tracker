@@ -1,63 +1,177 @@
 const { DiscordSteamLink } = require('../database/models');
-const logger = require('../utils/logger');
+const { verification: logger } = require('../utils/logger');
+const { EmbedBuilder } = require('discord.js');
 
 class ChatVerificationHandler {
     constructor(client) {
         this.client = client;
         this.handleChatMessage = this.handleChatMessage.bind(this);
+        // Store pending verifications with their interaction messages
+        this.pendingVerifications = new Map();
+        logger.info('ChatVerificationHandler initialized');
+    }
+
+    // Add method to store interaction message for a verification code
+    storeVerificationMessage(code, interaction) {
+        logger.debug('Storing verification message', { code, interactionId: interaction.id });
+        this.pendingVerifications.set(code, interaction);
+        // Clean up after expiration
+        setTimeout(() => {
+            logger.debug('Cleaning up expired verification message', { code });
+            this.pendingVerifications.delete(code);
+        }, 15 * 60 * 1000); // 15 minutes
     }
 
     async handleChatMessage(eventData) {
-        if (!eventData || eventData.event !== 'PLAYER_CHAT') {
+        logger.debug('Received chat message for verification', {
+            event: eventData.event,
+            serverID: eventData.serverID,
+            data: eventData.data
+        });
+
+        if (!eventData || eventData.event !== 'CHAT_MESSAGE') {
+            logger.debug('Ignoring non-chat event', { event: eventData?.event });
             return;
         }
 
-        const { message, steamID, serverID } = eventData.data;
+        // Extract message and steamID from CHAT_MESSAGE event
+        const message = eventData.data.message;
+        const steamID = eventData.data.steamID;
+        const serverID = eventData.serverID;
         
+        if (!message || !steamID || !serverID) {
+            logger.debug('Missing required chat data', { message, steamID, serverID });
+            return;
+        }
+
         // Check if this is a verification code
         const code = message.trim().toUpperCase();
+        logger.debug('Checking verification code', { code, steamID, serverID });
+
         if (!/^[A-Z0-9]{6}$/.test(code)) {
+            logger.debug('Message is not a valid verification code', { code });
             return; // Not a verification code
         }
 
         try {
+            logger.info(`Attempting to verify code ${code} for Steam ID ${steamID} on server ${serverID}`);
+            
+            // Check if this Steam ID is already linked
+            const existingLink = await DiscordSteamLink.findOne({
+                where: {
+                    steamID,
+                    isVerified: true
+                }
+            });
+
+            if (existingLink) {
+                logger.info(`Steam ID ${steamID} is already linked to Discord user ${existingLink.discordID}`);
+                // Update the original message if we have it
+                const interaction = this.pendingVerifications.get(code);
+                logger.debug('Found interaction for existing link', { 
+                    code, 
+                    hasInteraction: !!interaction,
+                    interactionId: interaction?.id 
+                });
+                if (interaction) {
+                    const embed = new EmbedBuilder()
+                        .setColor('#ff0000')
+                        .setTitle('Verification Failed')
+                        .setDescription('This Steam account is already linked to another Discord account.')
+                        .addFields(
+                            { name: 'Steam ID', value: steamID },
+                            { name: 'Linked To', value: `<@${existingLink.discordID}>` }
+                        );
+                    await interaction.editReply({ embeds: [embed] });
+                    this.pendingVerifications.delete(code);
+                }
+                return;
+            }
+
             // Try to verify the code with the Steam ID from the chat message
             const { success, link, error } = await DiscordSteamLink.verifyLink(code, serverID, steamID);
             
             if (!success) {
-                logger.debug(`Invalid verification attempt from Steam ID ${steamID}: ${error}`);
-                return;
-            }
-
-            // Get the Discord user
-            const user = await this.client.users.fetch(link.discordID);
-            if (!user) {
-                logger.error(`Could not find Discord user ${link.discordID} for verification`);
-                return;
-            }
-
-            // Send verification success DM
-            try {
-                await user.send({
-                    embeds: [{
-                        color: 0x00ff00,
-                        title: 'Account Link Verified!',
-                        description: 'Your Discord account has been successfully linked with your Squad account.',
-                        fields: [
-                            { name: 'Steam ID', value: link.steamID },
-                            { name: 'Verified On', value: new Date().toLocaleString() },
-                            { name: 'Server', value: serverID }
-                        ]
-                    }]
+                logger.info(`Verification failed for Steam ID ${steamID}`, { error });
+                // Check if the code exists but is expired
+                const expiredLink = await DiscordSteamLink.findOne({
+                    where: {
+                        verificationCode: code,
+                        isVerified: false
+                    }
                 });
-            } catch (dmError) {
-                logger.error(`Could not send verification DM to user ${link.discordID}:`, dmError);
-                // Continue anyway since the link is still valid
+                if (expiredLink) {
+                    logger.info(`Found expired verification code for Discord user ${expiredLink.discordID}`);
+                    // Update the original message if we have it
+                    const interaction = this.pendingVerifications.get(code);
+                    logger.debug('Found interaction for expired code', { 
+                        code, 
+                        hasInteraction: !!interaction,
+                        interactionId: interaction?.id 
+                    });
+                    if (interaction) {
+                        const embed = new EmbedBuilder()
+                            .setColor('#ff0000')
+                            .setTitle('Verification Failed')
+                            .setDescription('The verification code has expired. Please use `/link` to generate a new code.');
+                        await interaction.editReply({ embeds: [embed] });
+                        this.pendingVerifications.delete(code);
+                    }
+                }
+                return;
+            }
+
+            // Update the original message if we have it
+            const interaction = this.pendingVerifications.get(code);
+            logger.debug('Found interaction for successful verification', { 
+                code, 
+                hasInteraction: !!interaction,
+                interactionId: interaction?.id 
+            });
+            if (interaction) {
+                const embed = new EmbedBuilder()
+                    .setColor('#00ff00')
+                    .setTitle('Account Link Verified!')
+                    .setDescription('Your Discord account has been successfully linked with your Squad account.')
+                    .addFields(
+                        { name: 'Steam ID', value: link.steamID },
+                        { name: 'Verified On', value: new Date().toLocaleString() },
+                        { name: 'Server', value: serverID }
+                    );
+                try {
+                    await interaction.editReply({ embeds: [embed] });
+                    logger.debug('Successfully updated verification message');
+                } catch (error) {
+                    logger.error('Failed to update verification message', { error });
+                }
+                this.pendingVerifications.delete(code);
+            } else {
+                logger.warn('No interaction found for successful verification', { code });
             }
 
             logger.info(`Successfully verified link for Discord user ${link.discordID} with Steam ID ${steamID}`);
         } catch (error) {
-            logger.error('Error processing chat verification:', error);
+            logger.error('Error processing chat verification', { error });
+            // Update the original message if we have it
+            const interaction = this.pendingVerifications.get(code);
+            logger.debug('Found interaction for error case', { 
+                code, 
+                hasInteraction: !!interaction,
+                interactionId: interaction?.id 
+            });
+            if (interaction) {
+                const embed = new EmbedBuilder()
+                    .setColor('#ff0000')
+                    .setTitle('Verification Failed')
+                    .setDescription('There was an error processing your verification. Please try again later.');
+                try {
+                    await interaction.editReply({ embeds: [embed] });
+                    logger.debug('Successfully updated error message');
+                } catch (error) {
+                    logger.error('Failed to update error message', { error });
+                }
+                this.pendingVerifications.delete(code);
+            }
         }
     }
 }

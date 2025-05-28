@@ -1,104 +1,87 @@
 const winston = require('winston');
+const path = require('path');
 
-// Custom format to filter out non-essential logs
-const filterNonEssential = winston.format((info) => {
-    // Always keep error, warn, and info level messages
-    if (info.level === 'error' || info.level === 'warn' || info.level === 'info') {
-        return info;
+// Define log categories
+const LOG_CATEGORIES = {
+    VERIFICATION: 'verification',  // Account linking and verification
+    DATABASE: 'database',         // Database operations
+    SERVER: 'server',            // Server connection and events
+    COMMAND: 'command',          // Discord command handling
+    CHAT: 'chat',               // Chat event handling
+    SYSTEM: 'system'            // General system operations
+};
+
+// Create a custom format that includes the category
+const categoryFormat = winston.format.printf(({ level, message, category, timestamp, ...metadata }) => {
+    let msg = `${timestamp} [${level.toUpperCase()}]`;
+    if (category) {
+        msg += ` [${category}]`;
     }
-
-    // For debug level, only keep essential messages
-    if (info.level === 'debug') {
-        // Keep database-related messages
-        if (info.message && (
-            info.message.includes('[Database]') ||
-            info.message.includes('[Migration]') ||
-            info.message.includes('Flushed') ||
-            info.message.includes('Failed to process') ||
-            info.message.includes('Database connection') ||
-            info.message.includes('Database initialization') ||
-            info.message.includes('Database migrations')
-        )) {
-            return info;
-        }
-
-        // Filter out non-essential debug messages
-        if (info.message && (
-            info.message.includes('Socket event received') ||
-            info.message.includes('Untracked event received') ||
-            info.message.includes('PLAYER_POSSESS') ||
-            info.message.includes('PLAYER_UNPOSSESS') ||
-            info.message.includes('UPDATED_PLAYER_INFORMATION') ||
-            info.message.includes('SQUAD_CREATED') ||
-            info.message.includes('PLAYER_SQUAD_CHANGE') ||
-            info.message.includes('TICK_RATE') ||
-            (info.message.includes('PLAYER_DAMAGED') && !info.message.includes('Error')) ||
-            info.message.includes('START TRANSACTION') ||
-            info.message.includes('COMMIT') ||
-            info.message.includes('Connection') ||
-            info.message.includes('Reconnection')
-        )) {
-            return false;
-        }
+    msg += `: ${message}`;
+    
+    // Add metadata if present
+    if (Object.keys(metadata).length > 0) {
+        msg += ` ${JSON.stringify(metadata)}`;
     }
-
-    return info;
+    
+    return msg;
 });
 
+// Create the logger
 const logger = winston.createLogger({
-    level: process.env.NODE_ENV === 'production' ? 'info' : 'debug',
+    level: process.env.LOG_LEVEL || 'info',
     format: winston.format.combine(
-        filterNonEssential(),
-        winston.format.timestamp({
-            format: 'YYYY-MM-DD HH:mm:ss'
-        }),
-        winston.format.errors({ stack: true }),
-        winston.format.splat(),
-        winston.format.json()
+        winston.format.timestamp(),
+        winston.format.metadata({ fillExcept: ['message', 'level', 'timestamp', 'category'] }),
+        categoryFormat
     ),
     defaultMeta: { service: 'squad-stats-bot' },
     transports: [
-        new winston.transports.File({ 
-            filename: 'logs/error.log', 
-            level: 'error',
+        // Console transport with color
+        new winston.transports.Console({
             format: winston.format.combine(
-                winston.format.timestamp(),
-                winston.format.json()
+                winston.format.colorize(),
+                categoryFormat
             )
         }),
+        // File transport for all logs
         new winston.transports.File({ 
-            filename: 'logs/combined.log',
-            format: winston.format.combine(
-                winston.format.timestamp(),
-                winston.format.json()
-            )
+            filename: path.join('logs', 'combined.log'),
+            maxsize: 5242880, // 5MB
+            maxFiles: 5
+        }),
+        // Separate file for errors
+        new winston.transports.File({ 
+            filename: path.join('logs', 'error.log'), 
+            level: 'error',
+            maxsize: 5242880, // 5MB
+            maxFiles: 5
         })
     ]
 });
 
-// If we're not in production, also log to the console with colors
-if (process.env.NODE_ENV !== 'production') {
-    logger.add(new winston.transports.Console({
-        format: winston.format.combine(
-            winston.format.colorize(),
-            winston.format.printf(({ level, message, timestamp, ...metadata }) => {
-                let msg = `${timestamp} [${level}]: ${message}`;
-                if (Object.keys(metadata).length > 0 && metadata.service) {
-                    msg += ` ${JSON.stringify(metadata)}`;
-                }
-                return msg;
-            })
-        )
-    }));
-} else {
-    // In production, log to console but only info level and above
-    logger.add(new winston.transports.Console({
-        level: 'info',
-        format: winston.format.combine(
-            winston.format.colorize(),
-            winston.format.simple()
-        )
-    }));
-}
+// Helper functions to create category-specific loggers
+const createCategoryLogger = (category) => ({
+    error: (message, meta = {}) => logger.error(message, { ...meta, category }),
+    warn: (message, meta = {}) => logger.warn(message, { ...meta, category }),
+    info: (message, meta = {}) => logger.info(message, { ...meta, category }),
+    debug: (message, meta = {}) => logger.debug(message, { ...meta, category }),
+    verbose: (message, meta = {}) => logger.verbose(message, { ...meta, category })
+});
 
-module.exports = logger; 
+// Export category-specific loggers
+module.exports = {
+    LOG_CATEGORIES,
+    verification: createCategoryLogger(LOG_CATEGORIES.VERIFICATION),
+    database: createCategoryLogger(LOG_CATEGORIES.DATABASE),
+    server: createCategoryLogger(LOG_CATEGORIES.SERVER),
+    command: createCategoryLogger(LOG_CATEGORIES.COMMAND),
+    chat: createCategoryLogger(LOG_CATEGORIES.CHAT),
+    system: createCategoryLogger(LOG_CATEGORIES.SYSTEM),
+    // Also export the base logger for backward compatibility
+    error: logger.error.bind(logger),
+    warn: logger.warn.bind(logger),
+    info: logger.info.bind(logger),
+    debug: logger.debug.bind(logger),
+    verbose: logger.verbose.bind(logger)
+}; 

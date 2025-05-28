@@ -158,6 +158,35 @@ class ServerManager extends EventEmitter {
         // Forward all events from the socket to our event emitter
         socket.onAny((eventName, ...args) => {
             try {
+                // Add specific debug logging for chat events
+                if (eventName === 'CHAT_MESSAGE') {
+                    logger.debug(`Chat event received from ${serverConfig.id}:`, {
+                        event: eventName,
+                        data: args[0],
+                        hasVerificationHandler: !!this.chatVerificationHandler
+                    });
+
+                    // Always handle chat events for verification, regardless of logStats setting
+                    const eventData = {
+                        event: eventName,
+                        serverID: serverConfig.id,
+                        timestamp: new Date().toISOString(),
+                        data: args[0]
+                    };
+
+                    if (this.chatVerificationHandler) {
+                        this.chatVerificationHandler.handleChatMessage(eventData);
+                    }
+
+                    // If logStats is enabled, also buffer the chat event
+                    if (serverConfig.logStats) {
+                        this.eventBuffer.addEvent(eventData);
+                    }
+                    
+                    this.emit(eventName, eventData);
+                    return;
+                }
+
                 logger.debug(`Socket event received from ${serverConfig.id}:`, {
                     event: eventName,
                     data: args[0]  // Log the actual event data
@@ -177,11 +206,13 @@ class ServerManager extends EventEmitter {
                     this.emit(eventName, eventData);
                 } else if (eventName === 'connect' || eventName === 'disconnect' || eventName === 'connect_error') {
                     // Always emit connection-related events regardless of logStats setting
-                    this.emit(eventName, { 
-                        serverID: serverConfig.id,  // Note: serverID not serverId
+                    const eventData = {
+                        event: eventName,
+                        serverID: serverConfig.id,
                         timestamp: new Date().toISOString(),
-                        data: args[0]  // Nest connection event data too
-                    });
+                        data: args[0]
+                    };
+                    this.emit(eventName, eventData);
                 }
             } catch (error) {
                 logger.error(`Error handling socket event ${eventName} from ${serverConfig.id}:`, error);
@@ -324,33 +355,9 @@ class ServerManager extends EventEmitter {
                         // Add player connection data to debug logs
                         steamID: data.steamID,
                         eosID: data.eosID,
-                        name: data.name,
-                        // Add chat message data
-                        message: data.event === 'PLAYER_CHAT' ? data.message : undefined
+                        name: data.name
                     }
                 });
-            }
-
-            // Always handle chat events for verification, regardless of logStats setting
-            if (data.event === 'PLAYER_CHAT') {
-                const eventData = {
-                    event: data.event,
-                    serverID: serverId,
-                    timestamp: new Date().toISOString(),
-                    data: data
-                };
-
-                // Process chat for verification if handler exists
-                if (this.chatVerificationHandler) {
-                    this.chatVerificationHandler.handleChatMessage(eventData);
-                }
-
-                // If logStats is enabled, also buffer the chat event
-                if (server.config.logStats) {
-                    this.eventBuffer.addEvent(eventData);
-                    this.emit(data.event, eventData);
-                }
-                return;
             }
 
             // Handle connection-related events

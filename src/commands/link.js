@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const { DiscordSteamLink } = require('../database/models');
-const logger = require('../utils/logger');
+const { command: logger } = require('../utils/logger');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -33,7 +33,7 @@ module.exports = {
                     break;
             }
         } catch (error) {
-            logger.error('Error in link command:', error);
+            logger.error('Error in link command', { error });
             if (!interaction.replied && !interaction.deferred) {
                 await interaction.reply({
                     content: 'There was an error processing your request. Please try again later.',
@@ -58,6 +58,7 @@ module.exports = {
         const { link, isNew, error } = await DiscordSteamLink.createLinkRequest(discordID);
         
         if (error) {
+            logger.error('Error creating link request', { error, discordID });
             await interaction.reply({
                 content: 'There was an error creating your link request. Please try again later.',
                 ephemeral: true
@@ -70,7 +71,7 @@ module.exports = {
             .setTitle('Account Link Request')
             .setDescription('To verify your account, follow these steps:')
             .addFields(
-                { name: 'Step 1', value: 'Join any Squad server' },
+                { name: 'Step 1', value: 'Join any of our Squad servers' },
                 { name: 'Step 2', value: `Type this code in the in-game chat: \`${link.verificationCode}\`` },
                 { name: 'Step 3', value: 'Wait for the bot to confirm your verification' },
                 { name: 'Verification Code', value: `\`${link.verificationCode}\`` },
@@ -78,8 +79,23 @@ module.exports = {
             )
             .setFooter({ text: 'The verification code will expire in 15 minutes' });
 
+        // Reply with the embed
         await interaction.reply({ embeds: [embed], ephemeral: true });
-        logger.info(`Link request created for Discord user ${discordID}`);
+
+        // Store the interaction message with the chat verification handler
+        const chatVerificationHandler = interaction.client.chatVerificationHandler;
+        if (chatVerificationHandler) {
+            logger.debug('Storing verification message in handler', { 
+                code: link.verificationCode,
+                interactionId: interaction.id,
+                hasHandler: !!chatVerificationHandler
+            });
+            chatVerificationHandler.storeVerificationMessage(link.verificationCode, interaction);
+        } else {
+            logger.error('Chat verification handler not found on client');
+        }
+
+        logger.info('Link request created', { discordID, code: link.verificationCode });
     },
 
     async handleCheckStatus(interaction, discordID) {
@@ -106,23 +122,25 @@ module.exports = {
                 );
 
             await interaction.reply({ embeds: [embed], ephemeral: true });
+            logger.debug('Status check - active link found', { discordID, steamID: activeLink.steamID });
         } else if (pendingLink) {
             const embed = new EmbedBuilder()
                 .setColor('#ff9900')
                 .setTitle('Pending Link Request')
                 .setDescription('You have a pending link request:')
                 .addFields(
-                    { name: 'Steam ID', value: pendingLink.steamID },
                     { name: 'Verification Code', value: `\`${pendingLink.verificationCode}\`` },
                     { name: 'Expires', value: `<t:${Math.floor(pendingLink.verificationExpires.getTime() / 1000)}:R>` }
                 );
 
             await interaction.reply({ embeds: [embed], ephemeral: true });
+            logger.debug('Status check - pending link found', { discordID, code: pendingLink.verificationCode });
         } else {
             await interaction.reply({
                 content: 'You have no active or pending account links. Use `/link` to start the linking process.',
                 ephemeral: true
             });
+            logger.debug('Status check - no links found', { discordID });
         }
     },
 
@@ -142,6 +160,7 @@ module.exports = {
                 content: 'You have no pending link requests to cancel.',
                 ephemeral: true
             });
+            logger.debug('Cancel attempt - no pending link found', { discordID });
             return;
         }
 
@@ -150,6 +169,6 @@ module.exports = {
             content: 'Your pending link request has been cancelled.',
             ephemeral: true
         });
-        logger.info(`Link request cancelled for Discord user ${discordID}`);
+        logger.info('Link request cancelled', { discordID, code: pendingLink.verificationCode });
     }
 }; 
