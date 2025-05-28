@@ -19,9 +19,11 @@ const categoryFormat = winston.format.printf(({ level, message, category, timest
     }
     msg += `: ${message}`;
     
-    // Add metadata if present
-    if (Object.keys(metadata).length > 0) {
-        msg += ` ${JSON.stringify(metadata)}`;
+    // Add metadata if present, but exclude service
+    const filteredMeta = { ...metadata };
+    delete filteredMeta.service;
+    if (Object.keys(filteredMeta).length > 0) {
+        msg += ` ${JSON.stringify(filteredMeta)}`;
     }
     
     return msg;
@@ -31,7 +33,9 @@ const categoryFormat = winston.format.printf(({ level, message, category, timest
 const logger = winston.createLogger({
     level: process.env.LOG_LEVEL || 'info',
     format: winston.format.combine(
-        winston.format.timestamp(),
+        winston.format.timestamp({
+            format: 'YYYY-MM-DD HH:mm:ss'
+        }),
         winston.format.metadata({ fillExcept: ['message', 'level', 'timestamp', 'category'] }),
         categoryFormat
     ),
@@ -40,22 +44,52 @@ const logger = winston.createLogger({
         // Console transport with color
         new winston.transports.Console({
             format: winston.format.combine(
-                winston.format.colorize(),
-                categoryFormat
+                winston.format.colorize({ all: true }),
+                winston.format.timestamp({
+                    format: 'YYYY-MM-DD HH:mm:ss'
+                }),
+                winston.format.printf(({ level, message, category, timestamp, ...metadata }) => {
+                    let msg = `${timestamp} [${level}]`;
+                    if (category) {
+                        msg += ` [${category}]`;
+                    }
+                    msg += `: ${message}`;
+                    
+                    // Add metadata if present, but exclude service
+                    const filteredMeta = { ...metadata };
+                    delete filteredMeta.service;
+                    if (Object.keys(filteredMeta).length > 0) {
+                        msg += ` ${JSON.stringify(filteredMeta)}`;
+                    }
+                    
+                    return msg;
+                })
             )
         }),
         // File transport for all logs
         new winston.transports.File({ 
             filename: path.join('logs', 'combined.log'),
             maxsize: 5242880, // 5MB
-            maxFiles: 5
+            maxFiles: 5,
+            format: winston.format.combine(
+                winston.format.timestamp({
+                    format: 'YYYY-MM-DD HH:mm:ss'
+                }),
+                winston.format.json()
+            )
         }),
         // Separate file for errors
         new winston.transports.File({ 
             filename: path.join('logs', 'error.log'), 
             level: 'error',
             maxsize: 5242880, // 5MB
-            maxFiles: 5
+            maxFiles: 5,
+            format: winston.format.combine(
+                winston.format.timestamp({
+                    format: 'YYYY-MM-DD HH:mm:ss'
+                }),
+                winston.format.json()
+            )
         })
     ]
 });
