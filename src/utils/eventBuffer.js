@@ -238,11 +238,47 @@ class EventBuffer {
 
         for (const event of events) {
             try {
-                const player = event.data?.player || {};
-                const steamID = player.steamID;
-                const eosID = player.eosID;
+                let steamID = null;
+                let eosID = null;
+
+                // First try to get player data from the event
+                const player = event.data?.player;
+                if (player) {
+                    steamID = player.steamID;
+                    eosID = player.eosID;
+                }
+
+                // If no player data or no IDs found, try to extract from raw log data
+                if (!steamID && !eosID && event.data?.rawLog) {
+                    const rawLog = event.data.rawLog;
+                    
+                    // Try to extract EOS ID from raw log
+                    const eosMatch = rawLog.match(/UniqueId:\s*(RedpointEOS:[a-f0-9]+)/i);
+                    if (eosMatch) {
+                        eosID = eosMatch[1];
+                    }
+
+                    // Try to extract Steam ID from raw log if present
+                    const steamMatch = rawLog.match(/SteamID:\s*(\d+)/i);
+                    if (steamMatch) {
+                        steamID = steamMatch[1];
+                    }
+                }
+
+                // If we still don't have any player identification, log and skip
                 if (!steamID && !eosID) {
-                    throw new Error('Player must have either steamID or eosID');
+                    logger.warn('Could not extract player identification from disconnection event', {
+                        event: event.event,
+                        serverID: event.serverID,
+                        timestamp: event.timestamp,
+                        rawData: event.data
+                    });
+                    results.failed++;
+                    results.errors.push({
+                        event,
+                        error: 'No player identification found in event data'
+                    });
+                    continue;
                 }
 
                 // Find player by steamID or eosID
@@ -262,12 +298,22 @@ class EventBuffer {
                         lastSeen: new Date()
                     }, { transaction });
                     results.successful++;
+                    logger.debug('Updated player disconnection status', {
+                        steamID,
+                        eosID,
+                        playerID: playerRecord.id
+                    });
                 } else {
-                    logger.warn(`Player not found for disconnection event:`, { steamID, eosID });
+                    logger.warn('Player not found for disconnection event', {
+                        steamID,
+                        eosID,
+                        serverID: event.serverID,
+                        timestamp: event.timestamp
+                    });
                     results.failed++;
                     results.errors.push({
                         event,
-                        error: 'Player not found'
+                        error: 'Player not found in database'
                     });
                 }
             } catch (error) {
@@ -276,7 +322,12 @@ class EventBuffer {
                     event,
                     error: error.message
                 });
-                logger.error('Error processing player disconnection:', error);
+                logger.error('Error processing player disconnection', {
+                    error: error.message,
+                    event: event.event,
+                    serverID: event.serverID,
+                    timestamp: event.timestamp
+                });
             }
         }
 
