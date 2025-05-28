@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder, InteractionResponseFlags } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const logger = require('../utils/logger');
 
 module.exports = {
@@ -21,7 +21,7 @@ module.exports = {
                 if (!command) {
                     await interaction.reply({
                         content: `Command \`${specificCommand}\` not found.`,
-                        flags: [InteractionResponseFlags.Ephemeral]
+                        ephemeral: true
                     });
                     return;
                 }
@@ -44,7 +44,7 @@ module.exports = {
                     embed.addFields({ name: 'Options', value: optionsList });
                 }
 
-                await interaction.reply({ embeds: [embed], flags: [InteractionResponseFlags.Ephemeral] });
+                await interaction.reply({ embeds: [embed], ephemeral: true });
                 return;
             }
 
@@ -87,10 +87,7 @@ module.exports = {
                 }
             });
 
-            await interaction.reply({ 
-                embeds: [embed], 
-                flags: [InteractionResponseFlags.Ephemeral] 
-            });
+            await interaction.reply({ embeds: [embed], ephemeral: true });
             logger.debug(`Help command executed by ${interaction.user.tag}`);
 
         } catch (error) {
@@ -98,12 +95,12 @@ module.exports = {
             if (!interaction.replied && !interaction.deferred) {
                 await interaction.reply({
                     content: 'There was an error executing this command!',
-                    flags: [InteractionResponseFlags.Ephemeral]
+                    ephemeral: true
                 });
             } else {
                 await interaction.editReply({
                     content: 'There was an error executing this command!',
-                    flags: [InteractionResponseFlags.Ephemeral]
+                    ephemeral: true
                 });
             }
         }

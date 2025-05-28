@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder, InteractionResponseFlags } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const { DiscordSteamLink } = require('../database/models');
 const { command: logger } = require('../utils/logger');
 
@@ -34,12 +34,10 @@ module.exports = {
             }
         } catch (error) {
             logger.error('Error in link command', { error });
-            if (!interaction.replied && !interaction.deferred) {
-                await interaction.reply({
-                    content: 'There was an error processing your request. Please try again later.',
-                    flags: [InteractionResponseFlags.Ephemeral]
-                });
-            }
+            await interaction.reply({
+                content: 'There was an error processing your request. Please try again later.',
+                ephemeral: true
+            });
         }
     },
 
@@ -49,7 +47,7 @@ module.exports = {
         if (existingLink) {
             await interaction.reply({
                 content: `You already have a verified link with Steam ID: ${existingLink.steamID}\nUse \`/link action:status\` to check your link status.`,
-                flags: [InteractionResponseFlags.Ephemeral]
+                ephemeral: true
             });
             return;
         }
@@ -61,7 +59,7 @@ module.exports = {
             logger.error('Error creating link request', { error, discordID });
             await interaction.reply({
                 content: 'There was an error creating your link request. Please try again later.',
-                flags: [InteractionResponseFlags.Ephemeral]
+                ephemeral: true
             });
             return;
         }
@@ -80,10 +78,7 @@ module.exports = {
             .setFooter({ text: 'The verification code will expire in 15 minutes' });
 
         // Reply with the embed
-        await interaction.reply({ 
-            embeds: [embed], 
-            flags: [InteractionResponseFlags.Ephemeral] 
-        });
+        await interaction.reply({ embeds: [embed], ephemeral: true });
 
         // Store the interaction message with the chat verification handler
         const chatVerificationHandler = interaction.client.chatVerificationHandler;
@@ -124,10 +119,7 @@ module.exports = {
                     { name: 'Confidence', value: activeLink.confidence }
                 );
 
-            await interaction.reply({ 
-                embeds: [embed], 
-                flags: [InteractionResponseFlags.Ephemeral] 
-            });
+            await interaction.reply({ embeds: [embed], ephemeral: true });
             logger.debug('Status check - active link found', { discordID, steamID: activeLink.steamID });
         } else if (pendingLink) {
             const embed = new EmbedBuilder()
@@ -139,15 +131,12 @@ module.exports = {
                     { name: 'Expires', value: `<t:${Math.floor(pendingLink.verificationExpires.getTime() / 1000)}:R>` }
                 );
 
-            await interaction.reply({ 
-                embeds: [embed], 
-                flags: [InteractionResponseFlags.Ephemeral] 
-            });
+            await interaction.reply({ embeds: [embed], ephemeral: true });
             logger.debug('Status check - pending link found', { discordID, code: pendingLink.verificationCode });
         } else {
             await interaction.reply({
                 content: 'You have no active or pending account links. Use `/link` to start the linking process.',
-                flags: [InteractionResponseFlags.Ephemeral]
+                ephemeral: true
             });
             logger.debug('Status check - no links found', { discordID });
         }
@@ -167,7 +156,7 @@ module.exports = {
         if (!pendingLink) {
             await interaction.reply({
                 content: 'You have no pending link requests to cancel.',
-                flags: [InteractionResponseFlags.Ephemeral]
+                ephemeral: true
             });
             logger.debug('Cancel attempt - no pending link found', { discordID });
             return;
@@ -176,7 +165,7 @@ module.exports = {
         await pendingLink.destroy();
         await interaction.reply({
             content: 'Your pending link request has been cancelled.',
-            flags: [InteractionResponseFlags.Ephemeral]
+            ephemeral: true
         });
         logger.info('Link request cancelled', { discordID, code: pendingLink.verificationCode });
     }

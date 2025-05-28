@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, InteractionResponseFlags } = require('discord.js');
+const { SlashCommandBuilder } = require('discord.js');
 const logger = require('../utils/logger');
 
 module.exports = {
@@ -24,7 +24,7 @@ module.exports = {
             if (!interaction.replied && !interaction.deferred) {
                 await interaction.reply({ 
                     content: 'There was an error executing this command!', 
-                    flags: [InteractionResponseFlags.Ephemeral] 
+                    ephemeral: true 
                 });
             } else {
                 // If we have replied, try to edit the reply
