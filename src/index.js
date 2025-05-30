@@ -2,7 +2,7 @@ require('dotenv').config();
 const { Client, GatewayIntentBits, Collection } = require('discord.js');
 const logger = require('./utils/logger');
 const { initializeDatabase } = require('./database/init');
-const ServerManager = require('./utils/serverManager');
+const ServerManager = require('./utils/server-manager');
 const { sequelize } = require('./database/models');
 
 // Create a new client instance

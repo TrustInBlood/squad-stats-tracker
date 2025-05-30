@@ -1,7 +1,7 @@
 const logger = require('./logger');
 const fs = require('fs').promises;
 const path = require('path');
-const { PlayerDamage, PlayerWound, PlayerDeath, PlayerRevive, Player, sequelize } = require('../database/models');
+const { sequelize } = require('../database/config/database');
 const { Op } = require('sequelize');
 
 // Helper function to sanitize player names
@@ -189,18 +189,6 @@ class EventBuffer {
             try {
                 let batchResult;
                 switch (eventType) {
-                    case 'PLAYER_DAMAGED':
-                        batchResult = await PlayerDamage.bulkCreateFromSquadEvents(batch, { transaction });
-                        break;
-                    case 'PLAYER_WOUNDED':
-                        batchResult = await PlayerWound.bulkCreateFromSquadEvents(batch, { transaction });
-                        break;
-                    case 'PLAYER_DIED':
-                        batchResult = await PlayerDeath.bulkCreateFromSquadEvents(batch, { transaction });
-                        break;
-                    case 'PLAYER_REVIVED':
-                        batchResult = await PlayerRevive.bulkCreateFromSquadEvents(batch, { transaction });
-                        break;
                     case 'PLAYER_CONNECTED':
                         batchResult = await this.handlePlayerConnections(batch, transaction);
                         break;
@@ -209,6 +197,11 @@ class EventBuffer {
                         break;
                     case 'PLAYER_CHAT':
                         // Chat events are handled in real-time
+                        batchResult = { successful: batch.length, failed: 0, errors: [] };
+                        break;
+                    default:
+                        // For now, just log that we're not handling these events yet
+                        logger.debug(`Event type ${eventType} not yet implemented`);
                         batchResult = { successful: batch.length, failed: 0, errors: [] };
                         break;
                 }

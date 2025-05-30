@@ -1,5 +1,5 @@
 const logger = require('../utils/logger');
-const ServerManager = require('../utils/serverManager');
+const ServerManager = require('../utils/server-manager');
 const ChatVerificationHandler = require('../handlers/chat-verification');
 
 // Create a single server manager instance for the bot
