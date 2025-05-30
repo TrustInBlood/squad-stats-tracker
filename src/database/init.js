@@ -13,17 +13,17 @@ async function runMigrations() {
                     const migration = require(path);
                     return {
                         name,
-                        up: async () => migration.up(context.queryInterface, context.sequelize),
-                        down: async () => migration.down(context.queryInterface, context.sequelize)
+                        up: async () => migration.up(context.queryInterface, Sequelize), // Pass Sequelize constructor
+                        down: async () => migration.down(context.queryInterface, Sequelize) // Pass Sequelize constructor
                     };
                 }
             },
-            context: { queryInterface: sequelize.getQueryInterface(), sequelize },
+            context: { queryInterface: sequelize.getQueryInterface(), sequelize }, // Keep instance for queryInterface
             storage: new SequelizeStorage({ sequelize }),
             logger: {
-                info: (msg) => logger.info(`[Migration] ${msg}`),
-                warn: (msg) => logger.warn(`[Migration] ${msg}`),
-                error: (msg) => logger.error(`[Migration] ${msg}`)
+                info: (msg) => logger.info(`[Migration] ${typeof msg === 'object' ? msg.name : msg}`),
+                warn: (msg) => logger.warn(`[Migration] ${typeof msg === 'object' ? msg.name : msg}`),
+                error: (msg) => logger.error(`[Migration] ${typeof msg === 'object' ? msg.name : msg}`)
             }
         });
 
@@ -70,4 +70,4 @@ async function initializeDatabase() {
 module.exports = {
     initializeDatabase,
     runMigrations
-}; 
+};
