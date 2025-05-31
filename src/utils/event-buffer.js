@@ -1,8 +1,7 @@
-//src/utils/event-buffer.js
 const fs = require('fs').promises;
 const path = require('path');
 const logger = require('./logger');
-const { sequelize } = require('../database/models');
+const { sequelize, models } = require('../database/models'); // Ensure models is imported
 const { upsertPlayer } = require('./player-utils');
 const { getWeaponId } = require('./weapon-utils');
 
@@ -14,6 +13,7 @@ class EventBuffer {
       maxAge: options.maxAge || 10000,
       maxRetries: options.maxRetries || 3,
       deadLetterPath: options.deadLetterPath || path.join(process.cwd(), 'logs', 'dead-letter'),
+      deathDelay: options.deathDelay || 10000,
     };
 
     this.buffers = {
@@ -80,6 +80,14 @@ class EventBuffer {
     const buffer = this.buffers[event.event];
     buffer.push(event);
 
+    if (event.event === 'PLAYER_DIED') {
+      const now = Date.now();
+      const eventTime = new Date(event.timestamp).getTime();
+      if (now - eventTime < this.options.deathDelay) {
+        return;
+      }
+    }
+
     if (buffer.length >= this.options.maxBufferSize) {
       logger.debug(`Buffer for ${event.event} reached max size, forcing flush`);
       this.flushBuffer(event.event);
@@ -95,18 +103,29 @@ class EventBuffer {
   async flushBuffer(eventType) {
     const buffer = this.buffers[eventType];
     if (buffer.length === 0) return;
-  
-    const eventsToProcess = [...buffer];
-    buffer.length = 0;
+
+    const now = Date.now();
+    const eventsToProcess = eventType === 'PLAYER_DIED'
+      ? buffer.filter(event => now - new Date(event.timestamp).getTime() >= this.options.deathDelay)
+      : [...buffer];
+
+    if (eventType === 'PLAYER_DIED') {
+      this.buffers[eventType] = buffer.filter(event => now - new Date(event.timestamp).getTime() < this.options.deathDelay);
+    } else {
+      buffer.length = 0;
+    }
+
+    if (eventsToProcess.length === 0) return;
+
     this.lastFlush[eventType] = Date.now();
-  
+
     const results = {
       successful: 0,
       failed: 0,
       created: 0,
       errors: [],
     };
-  
+
     try {
       for (const event of eventsToProcess) {
         const transaction = await sequelize.transaction({ timeout: 5000 });
@@ -138,9 +157,9 @@ class EventBuffer {
               batchResult = { successful: 1, failed: 0, created: 0, errors: [] };
               break;
           }
-  
+
           await transaction.commit();
-  
+
           if (batchResult) {
             results.successful += batchResult.successful || 0;
             results.failed += batchResult.failed || 0;
@@ -153,7 +172,7 @@ class EventBuffer {
             error: error.message,
             event: JSON.stringify(event),
           });
-  
+
           this.retryCounts[eventType] = (this.retryCounts[eventType] || 0) + 1;
           if (this.retryCounts[eventType] <= this.options.maxRetries) {
             this.retryDelays[eventType] = Math.min(30000, 1000 * Math.pow(2, this.retryCounts[eventType]));
@@ -189,7 +208,7 @@ class EventBuffer {
           }
         }
       }
-  
+
       this.retryCounts[eventType] = 0;
       this.retryDelays[eventType] = 0;
     } catch (error) {
@@ -197,7 +216,7 @@ class EventBuffer {
       results.failed += eventsToProcess.length;
       results.errors.push({ events: eventsToProcess, error: error.message });
     }
-  
+
     if (results.failed > 0 || results.created > 0) {
       logger.info(`${eventType} flush summary:`, {
         total: eventsToProcess.length,
@@ -208,7 +227,7 @@ class EventBuffer {
         timestamp: eventsToProcess[0]?.timestamp,
       });
     }
-  
+
     return results;
   }
 
@@ -262,23 +281,23 @@ class EventBuffer {
       try {
         const weaponId = await getWeaponId(event.data.weapon, transaction);
         logger.info('Weapon processed', { weapon: event.data.weapon, weaponId });
-  
+
         const playerIds = await upsertPlayer(event, transaction);
         if (!playerIds || playerIds.length === 0) {
           logger.warn('No players upserted for PLAYER_WOUNDED', { event: JSON.stringify(event) });
           continue;
         }
-  
+
         const attackerId = event.data.attacker ? playerIds[0] : null;
         const victimId = event.data.victim ? playerIds[event.data.attacker ? 1 : 0] : null;
-  
+
         await sequelize.models.PlayerWounded.create({
           server_id: event.serverID,
           attacker_id: attackerId,
           victim_id: victimId,
           weapon_id: weaponId,
           damage: event.data.damage,
-          teamkill: event.data.teamkill ?? false, // Default to false if undefined
+          teamkill: event.data.teamkill ?? false,
           attacker_squad_id: event.data.attacker?.squad?.squadID,
           victim_squad_id: event.data.victim?.squad?.squadID,
           attacker_team_id: event.data.attacker?.squad?.teamID,
@@ -287,7 +306,7 @@ class EventBuffer {
           created_at: new Date(),
           updated_at: new Date()
         }, { transaction });
-  
+
         results.successful++;
         results.created += playerIds.length;
         logger.info('Upserted players and logged event', { playerIds, eventType: 'PLAYER_WOUNDED' });
@@ -307,16 +326,55 @@ class EventBuffer {
       try {
         const playerIds = await upsertPlayer(event, transaction);
         if (!playerIds || playerIds.length === 0) {
-          logger.warn('No players upserted for PLAYER_DIED', { event });
+          logger.warn('No players upserted for PLAYER_DIED', { event: JSON.stringify(event) });
           continue;
         }
+
+        const attackerId = event.data.attacker ? playerIds[0] : null;
+        const victimId = event.data.victim ? playerIds[event.data.attacker ? 1 : 0] : null;
+
+        if (!victimId) {
+          logger.warn('Skipping PLAYER_DIED with invalid victim', { event: JSON.stringify(event) });
+          continue;
+        }
+
+        // Try to find the weapon_id, but proceed even if not found
+        const [woundingEvent] = await sequelize.query(`
+          SELECT weapon_id
+          FROM player_wounded
+          WHERE victim_id = :victimId
+            AND timestamp <= :time
+          ORDER BY timestamp DESC
+          LIMIT 1
+        `, {
+          replacements: { victimId, time: event.timestamp },
+          type: sequelize.QueryTypes.SELECT,
+          transaction
+        });
+
+        const weaponId = woundingEvent?.weapon_id || null;
+        if (!weaponId) {
+          logger.warn(`No matching PLAYER_WOUNDED found for PLAYER_DIED (victimId: ${victimId}), proceeding with weapon_id as NULL`);
+        }
+
+        await sequelize.models.Kill.create({
+          server_id: event.serverID,
+          attacker_id: attackerId,
+          victim_id: victimId,
+          weapon_id: weaponId,
+          teamkill: event.data.teamkill ?? false,
+          timestamp: new Date(event.timestamp),
+          created_at: new Date(),
+          updated_at: new Date()
+        }, { transaction });
+
         results.successful++;
         results.created += playerIds.length;
-        logger.info('Upserted players', { playerIds });
+        logger.info('Upserted players and logged kill', { playerIds, eventType: 'PLAYER_DIED', attackerId, victimId, weaponId });
       } catch (error) {
         results.failed++;
         results.errors.push({ event, error: error.message });
-        logger.error('Error processing PLAYER_DIED:', { error: error.message, event });
+        logger.error('Error processing PLAYER_DIED:', { error: error.message, event: JSON.stringify(event) });
         throw error;
       }
     }
