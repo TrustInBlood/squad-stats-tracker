@@ -387,16 +387,34 @@ class EventBuffer {
       try {
         const playerIds = await upsertPlayer(event, transaction);
         if (!playerIds || playerIds.length === 0) {
-          logger.warn('No players upserted for PLAYER_REVIVED', { event });
+          logger.warn('No players upserted for PLAYER_REVIVED', { event: JSON.stringify(event) });
           continue;
         }
+  
+        const reviverId = event.data.reviver ? playerIds[0] : null;
+        const victimId = event.data.victim ? playerIds[event.data.reviver ? 1 : 0] : null;
+  
+        if (!victimId || !reviverId) {
+          logger.warn('Skipping PLAYER_REVIVED with invalid reviver or victim', { event: JSON.stringify(event) });
+          continue;
+        }
+  
+        await sequelize.models.Revive.create({
+          server_id: event.serverID,
+          reviver_id: reviverId,
+          victim_id: victimId,
+          timestamp: new Date(event.timestamp),
+          created_at: new Date(),
+          updated_at: new Date()
+        }, { transaction });
+  
         results.successful++;
         results.created += playerIds.length;
-        logger.info('Upserted players', { playerIds });
+        logger.info('Upserted players and logged revive', { playerIds, eventType: 'PLAYER_REVIVED', reviverId, victimId });
       } catch (error) {
         results.failed++;
         results.errors.push({ event, error: error.message });
-        logger.error('Error processing PLAYER_REVIVED:', { error: error.message, event });
+        logger.error('Error processing PLAYER_REVIVED:', { error: error.message, event: JSON.stringify(event) });
         throw error;
       }
     }
