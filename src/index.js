@@ -6,6 +6,7 @@ const { initializeDatabase } = require('./database/init');
 const ServerManager = require('./utils/server-manager');
 const { sequelize } = require('./database/connection');
 const { initializeWeaponCache } = require('./utils/weapon-utils');
+const { startScheduler } = require('./utils/scheduler');
 
 const client = new Client({
   intents: [
@@ -29,6 +30,7 @@ Promise.all([
     try {
       await initializeWeaponCache();
       logger.info('Weapon cache initialized successfully');
+      startScheduler();
     } catch (error) {
       logger.error('Failed to initialize weapon cache, running without weapon caching:', error);
     }
