@@ -8,7 +8,7 @@
     "dev": "nodemon src/index.js",
     "test": "jest",
     "migrate": "sequelize-cli db:migrate",
-    "migrate:undo": "sequelize-cli db:migrate:undo",
+    "migrate:undo": "sequelize-cli db:migrate:undo --env development",
     "migrate:undo:all": "sequelize-cli db:migrate:undo:all",
     "migrate:create": "sequelize-cli migration:create",
     "db:migrate": "node -e \"require('./src/database/init').runMigrations().then(() => process.exit(0)).catch(err => { console.error(err); process.exit(1); })\""

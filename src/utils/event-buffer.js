@@ -1,9 +1,10 @@
-// /home/richie/modding/squad-stats-tracker/src/utils/event-buffer.js
+//src/utils/event-buffer.js
 const fs = require('fs').promises;
 const path = require('path');
 const logger = require('./logger');
 const { sequelize } = require('../database/models');
 const { upsertPlayer } = require('./player-utils');
+const { getWeaponId } = require('./weapon-utils');
 
 class EventBuffer {
   constructor(options = {}) {
@@ -94,21 +95,21 @@ class EventBuffer {
   async flushBuffer(eventType) {
     const buffer = this.buffers[eventType];
     if (buffer.length === 0) return;
-
+  
     const eventsToProcess = [...buffer];
     buffer.length = 0;
     this.lastFlush[eventType] = Date.now();
-
+  
     const results = {
       successful: 0,
       failed: 0,
       created: 0,
       errors: [],
     };
-
+  
     try {
       for (const event of eventsToProcess) {
-        const transaction = await sequelize.transaction();
+        const transaction = await sequelize.transaction({ timeout: 5000 });
         try {
           let batchResult;
           switch (eventType) {
@@ -137,9 +138,9 @@ class EventBuffer {
               batchResult = { successful: 1, failed: 0, created: 0, errors: [] };
               break;
           }
-
+  
           await transaction.commit();
-
+  
           if (batchResult) {
             results.successful += batchResult.successful || 0;
             results.failed += batchResult.failed || 0;
@@ -150,9 +151,9 @@ class EventBuffer {
           await transaction.rollback();
           logger.error(`Error processing event of type ${eventType}:`, {
             error: error.message,
-            event,
+            event: JSON.stringify(event),
           });
-
+  
           this.retryCounts[eventType] = (this.retryCounts[eventType] || 0) + 1;
           if (this.retryCounts[eventType] <= this.options.maxRetries) {
             this.retryDelays[eventType] = Math.min(30000, 1000 * Math.pow(2, this.retryCounts[eventType]));
@@ -188,7 +189,7 @@ class EventBuffer {
           }
         }
       }
-
+  
       this.retryCounts[eventType] = 0;
       this.retryDelays[eventType] = 0;
     } catch (error) {
@@ -196,7 +197,7 @@ class EventBuffer {
       results.failed += eventsToProcess.length;
       results.errors.push({ events: eventsToProcess, error: error.message });
     }
-
+  
     if (results.failed > 0 || results.created > 0) {
       logger.info(`${eventType} flush summary:`, {
         total: eventsToProcess.length,
@@ -207,7 +208,7 @@ class EventBuffer {
         timestamp: eventsToProcess[0]?.timestamp,
       });
     }
-
+  
     return results;
   }
 
@@ -259,18 +260,41 @@ class EventBuffer {
     const results = { successful: 0, failed: 0, created: 0, errors: [] };
     for (const event of events) {
       try {
+        const weaponId = await getWeaponId(event.data.weapon, transaction);
+        logger.info('Weapon processed', { weapon: event.data.weapon, weaponId });
+  
         const playerIds = await upsertPlayer(event, transaction);
         if (!playerIds || playerIds.length === 0) {
-          logger.warn('No players upserted for PLAYER_WOUNDED', { event });
+          logger.warn('No players upserted for PLAYER_WOUNDED', { event: JSON.stringify(event) });
           continue;
         }
+  
+        const attackerId = event.data.attacker ? playerIds[0] : null;
+        const victimId = event.data.victim ? playerIds[event.data.attacker ? 1 : 0] : null;
+  
+        await sequelize.models.PlayerWounded.create({
+          server_id: event.serverID,
+          attacker_id: attackerId,
+          victim_id: victimId,
+          weapon_id: weaponId,
+          damage: event.data.damage,
+          teamkill: event.data.teamkill ?? false, // Default to false if undefined
+          attacker_squad_id: event.data.attacker?.squad?.squadID,
+          victim_squad_id: event.data.victim?.squad?.squadID,
+          attacker_team_id: event.data.attacker?.squad?.teamID,
+          victim_team_id: event.data.victim?.squad?.teamID,
+          timestamp: new Date(event.timestamp),
+          created_at: new Date(),
+          updated_at: new Date()
+        }, { transaction });
+  
         results.successful++;
         results.created += playerIds.length;
-        logger.info('Upserted players', { playerIds });
+        logger.info('Upserted players and logged event', { playerIds, eventType: 'PLAYER_WOUNDED' });
       } catch (error) {
         results.failed++;
         results.errors.push({ event, error: error.message });
-        logger.error('Error processing PLAYER_WOUNDED:', { error: error.message, event });
+        logger.error('Error processing PLAYER_WOUNDED:', { error: error.message, event: JSON.stringify(event) });
         throw error;
       }
     }

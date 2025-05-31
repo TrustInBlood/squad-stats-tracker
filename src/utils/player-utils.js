@@ -38,29 +38,47 @@ async function upsertPlayer(event, transaction = null) {
 
   const { attacker, victim, player } = playerData;
   const playersToUpsert = [];
-  if (attacker) playersToUpsert.push({ ...attacker, steamID: event.data.attackerSteamID, eosID: event.data.attackerEOSID });
-  if (victim) playersToUpsert.push({ ...victim, steamID: event.data.victimSteamID, eosID: event.data.victimEOSID });
-  if (player) playersToUpsert.push({ ...player, steamID: event.data.steamID || player.steamID, eosID: event.data.eosID || player.eosID });
+  if (attacker) {
+    playersToUpsert.push({
+      ...attacker,
+      steamID: event.data.attackerSteamID || attacker.steamID,
+      eosID: event.data.attackerEOSID || attacker.eosID
+    });
+  }
+  if (victim) {
+    playersToUpsert.push({
+      ...victim,
+      steamID: event.data.victimSteamID || victim.steamID,
+      eosID: event.data.victimEOSID || victim.eosID
+    });
+  }
+  if (player) {
+    playersToUpsert.push({
+      ...player,
+      steamID: event.data.steamID || player.steamID,
+      eosID: event.data.eosID || player.eosID
+    });
+  }
 
   const playerIds = [];
   for (const player of playersToUpsert) {
     if (!player.steamID && !player.eosID) {
-      logger.warn('No valid player data for upsert, skipping', { 
-        playerName: player.name, 
-        steamID: player.steamID, 
-        eosID: player.eosID, 
-        eventType: event.event 
+      logger.warn('No valid player data for upsert, skipping', {
+        playerName: player.name,
+        steamID: player.steamID,
+        eosID: player.eosID,
+        eventType: event.event
       });
       continue;
     }
 
     const sanitizedName = sanitizePlayerName(player.name);
     if (!sanitizedName) {
-      logger.warn('Invalid sanitized name, skipping player', { 
-        playerName: player.name, 
-        steamID: player.steamID, 
-        eosID: player.eosID, 
-        eventType: event.event 
+      logger.warn('Invalid sanitized name, skipping player', {
+        playerName: player.name,
+        steamID: player.steamID,
+        eosID: player.eosID,
+        eventType: event.event
       });
       continue;
     }
@@ -71,93 +89,74 @@ async function upsertPlayer(event, transaction = null) {
       timestamp = new Date();
     }
 
-    const maxRetries = 3;
-    let attempt = 0;
+    try {
+      logger.info('Attempting to upsert player:', {
+        steamID: player.steamID,
+        eosID: player.eosID,
+        name: player.name,
+        sanitizedName,
+        timestamp: timestamp.toISOString(),
+        eventType: event.event,
+      });
 
-    while (attempt < maxRetries) {
-      try {
-        logger.info('Attempting to upsert player:', {
-          steamID: player.steamID,
-          eosID: player.eosID,
-          name: player.name,
-          sanitizedName,
-          timestamp: timestamp.toISOString(),
-          attempt: attempt + 1,
-          eventType: event.event,
-        });
+      await Player.upsert({
+        steam_id: player.steamID,
+        eos_id: player.eosID,
+        last_known_name: sanitizedName,
+        first_seen: timestamp,
+        last_seen: timestamp,
+        created_at: timestamp,
+        updated_at: timestamp
+      }, {
+        conflictFields: ['steam_id'],
+        transaction
+      });
 
-        const [record, created] = await Player.findOrCreate({
-          where: {
-            [Op.or]: [
-              { steam_id: player.steamID || null },
-              { eos_id: player.eosID || null },
-            ],
-          },
-          defaults: {
-            steam_id: player.steamID,
-            eos_id: player.eosID,
-            last_known_name: sanitizedName,
-            first_seen: timestamp,
-            last_seen: timestamp,
-            created_at: timestamp,
-            updated_at: timestamp,
-          },
-          transaction,
-        });
+      const whereClause = {};
+      if (player.steamID) whereClause.steam_id = player.steamID;
+      if (player.eosID) whereClause.eos_id = player.eosID;
 
-        logger.info('findOrCreate result:', { created, playerId: record?.id, eventType: event.event });
+      const record = await Player.findOne({
+        where: whereClause,
+        transaction
+      });
 
-        if (!created) {
-          await record.update({
-            last_known_name: sanitizedName,
-            last_seen: timestamp,
-            updated_at: timestamp,
-            steam_id: player.steamID || record.steam_id,
-            eos_id: player.eosID || record.eos_id,
-          }, { transaction });
-          logger.info('Updated existing player:', { playerId: record.id, eventType: event.event });
-        }
+      logger.info('Player upserted', {
+        playerId: record?.id,
+        created: record?.created_at === record?.updated_at,
+        eventType: event.event
+      });
 
-        if (!record || !record.id) {
-          logger.error('Player record or ID not found after findOrCreate', { player, eventType: event.event });
-          continue;
-        }
-
+      if (record && record.id) {
         playerIds.push(record.id);
-        break;
-      } catch (error) {
-        if (error.name === 'SequelizeDatabaseError' && error.message.includes('Deadlock found') && attempt < maxRetries - 1) {
-          attempt++;
-          logger.warn(`Deadlock detected, retrying (${attempt}/${maxRetries})`, {
-            steamID: player.steamID,
-            eosID: player.eosID,
-            name: player.name,
-            eventType: event.event,
-          });
-          await new Promise(resolve => setTimeout(resolve, 100 * attempt));
-          continue;
-        }
-        logger.error('Failed to upsert player:', {
-          error: error.message,
-          stack: error.stack,
-          errors: error.errors ? error.errors.map(e => ({
-            field: e.path,
-            message: e.message,
-            value: e.value,
-          })) : undefined,
+      } else {
+        logger.warn('No player record found after upsert', {
           steamID: player.steamID,
           eosID: player.eosID,
-          name: player.name,
-          sanitizedName,
-          eventType: event.event,
+          eventType: event.event
         });
-        continue;
       }
+    } catch (error) {
+      logger.error('Failed to upsert player:', {
+        error: error.message,
+        stack: error.stack,
+        errors: error.errors ? error.errors.map(e => ({
+          field: e.path,
+          message: e.message,
+          value: e.value,
+        })) : undefined,
+        steamID: player.steamID,
+        eosID: player.eosID,
+        name: player.name,
+        sanitizedName,
+        eventType: event.event,
+      });
+      continue;
     }
   }
 
   if (playerIds.length === 0) {
-    logger.warn('No players upserted for event', { eventType: event.event, fullEvent: event });
+    logger.warn('No players upserted for event', { eventType: event.event, fullEvent: JSON.stringify(event) });
   }
   return playerIds.length > 0 ? playerIds : null;
 }

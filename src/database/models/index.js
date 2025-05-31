@@ -2,11 +2,11 @@
 
 const fs = require('fs');
 const path = require('path');
-const { sequelize } = require('../config/database');
+const Sequelize = require('sequelize'); // Import Sequelize constructor
+const { sequelize } = require('../connection'); // Import sequelize instance
 
 const models = {};
 
-// Read all model files in this directory
 fs.readdirSync(__dirname)
   .filter(file => {
     return (
@@ -16,11 +16,10 @@ fs.readdirSync(__dirname)
     );
   })
   .forEach(file => {
-    const model = require(path.join(__dirname, file))(sequelize, sequelize.Sequelize.DataTypes);
+    const model = require(path.join(__dirname, file))(sequelize, Sequelize.DataTypes);
     models[model.name] = model;
   });
 
-// Set up associations
 Object.keys(models).forEach(modelName => {
   if (models[modelName].associate) {
     models[modelName].associate(models);
@@ -30,4 +29,4 @@ Object.keys(models).forEach(modelName => {
 module.exports = {
   sequelize,
   ...models
-}; 
+};

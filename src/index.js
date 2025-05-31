@@ -4,7 +4,8 @@ const { Client, GatewayIntentBits, Collection } = require('discord.js');
 const logger = require('./utils/logger');
 const { initializeDatabase } = require('./database/init');
 const ServerManager = require('./utils/server-manager');
-const { sequelize } = require('./database/models');
+const { sequelize } = require('./database/connection');
+const { initializeWeaponCache } = require('./utils/weapon-utils');
 
 const client = new Client({
   intents: [
@@ -21,9 +22,16 @@ client.serverManager = new ServerManager(); // Attach to client
 Promise.all([
   initializeDatabase(),
   client.serverManager.connectToAllServers(),
-]).then(([dbInitialized, _]) => {
+]).then(async ([dbInitialized, _]) => {
   if (!dbInitialized) {
     logger.info('Bot is running in degraded mode - database features will be unavailable');
+  } else {
+    try {
+      await initializeWeaponCache();
+      logger.info('Weapon cache initialized successfully');
+    } catch (error) {
+      logger.error('Failed to initialize weapon cache, running without weapon caching:', error);
+    }
   }
   require('./handlers/commands')(client);
   require('./handlers/events')(client);
