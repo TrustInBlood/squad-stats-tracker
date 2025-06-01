@@ -18,7 +18,7 @@ const client = new Client({
 });
 
 client.commands = new Collection();
-client.serverManager = new ServerManager(); // Attach to client
+client.serverManager = new ServerManager(client); // Pass client to ServerManager
 
 Promise.all([
   initializeDatabase(),

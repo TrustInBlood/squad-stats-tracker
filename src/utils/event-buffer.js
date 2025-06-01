@@ -1,12 +1,13 @@
 const fs = require('fs').promises;
 const path = require('path');
 const logger = require('./logger');
-const { sequelize, models } = require('../database/models'); // Ensure models is imported
+const { sequelize, Sequelize } = require('../database/models'); // Keep only sequelize and Sequelize
+const { Op } = require('sequelize');
 const { upsertPlayer } = require('./player-utils');
 const { getWeaponId } = require('./weapon-utils');
 
 class EventBuffer {
-  constructor(options = {}) {
+  constructor(options = {}, client) {
     this.options = {
       flushInterval: options.flushInterval || 5000,
       maxBufferSize: options.maxBufferSize || 100,
@@ -15,6 +16,7 @@ class EventBuffer {
       deadLetterPath: options.deadLetterPath || path.join(process.cwd(), 'logs', 'dead-letter'),
       deathDelay: options.deathDelay || 10000,
     };
+    this.client = client; // Store the client instance
 
     this.buffers = {
       PLAYER_DAMAGED: [],
@@ -240,9 +242,56 @@ class EventBuffer {
           logger.warn('No players upserted for CHAT_MESSAGE', { event });
           continue;
         }
+  
+        const playerId = playerIds[0];
+        const message = event.data.message || '';
+        const match = message.match(/^!link\s+(\w{6})$/i);
+        if (!match) {
+          results.successful++;
+          results.created += playerIds.length;
+          continue;
+        }
+  
+        const code = match[1].toUpperCase();
+        const verification = await sequelize.models.VerificationCode.findOne({
+          where: { code, expires_at: { [Op.gt]: new Date() } },
+          transaction
+        });
+  
+        if (!verification) {
+          logger.info(`Invalid or expired verification code: ${code}`);
+          results.successful++;
+          results.created += playerIds.length;
+          continue;
+        }
+  
+        const discordId = verification.discord_id;
+        await sequelize.models.PlayerDiscordLink.destroy({ where: { player_id: playerId }, transaction }); // Ensure one link per player_id
+        await sequelize.models.PlayerDiscordLink.create({
+          player_id: playerId,
+          discord_id: discordId,
+          linked_at: new Date()
+        }, { transaction });
+  
+        // After successful link, update the original ephemeral message if possible
+        if (verification.interaction_token && verification.application_id) {
+          try {
+            const { editOriginalInteractionResponse } = require('./discord-webhook');
+            await editOriginalInteractionResponse(
+              verification.application_id,
+              verification.interaction_token,
+              'Link successful! Your Squad account has been linked to your Discord account.'
+            );
+          } catch (err) {
+            logger.error('Failed to update original ephemeral message via webhook:', err);
+          }
+        }
+        
+        await verification.destroy({ transaction });
+  
         results.successful++;
         results.created += playerIds.length;
-        logger.info('Upserted players', { playerIds });
+        logger.info('Linked player to Discord', { playerId, discordId });
       } catch (error) {
         results.failed++;
         results.errors.push({ event, error: error.message });

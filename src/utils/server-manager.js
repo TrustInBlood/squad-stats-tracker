@@ -6,7 +6,7 @@ const { io } = require('socket.io-client');
 const EventBuffer = require('./event-buffer');
 
 class ServerManager extends EventEmitter {
-  constructor() {
+  constructor(client) {
     super();
     this.servers = new Map();
     this.config = null;
@@ -18,7 +18,7 @@ class ServerManager extends EventEmitter {
       flushInterval: 5000,
       maxBufferSize: 100,
       maxAge: 10000,
-    });
+    }, client);
 
     this.loadConfig();
     this.startBufferMonitoring();

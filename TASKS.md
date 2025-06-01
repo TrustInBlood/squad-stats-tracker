@@ -18,6 +18,13 @@
 - [X] Implement help command with dynamic command listing
 - [ ] Set up permission system for commands
 - [X] Create error handling and logging system
+  - [X] Implement consistent ephemeral message handling
+  - [X] Enhance error reporting and logging
+- [X] Implement Discord-Steam account linking system
+  - [X] Create verification code generation
+  - [X] Implement account linking commands
+  - [X] Add account unlinking functionality
+  - [X] Set up webhook notifications for linking events
 
 ### Database Setup
 - [X] Choose and set up database system (MariaDb)
@@ -26,8 +33,12 @@
   - [X] Server model for server tracking
   - [X] Player event models (damage, death, wound, revive)
   - [X] Discord-Steam link model for account verification
+    - [X] Create verification codes table
+    - [X] Create player-discord links table
+    - [X] Create unlink history table
   - [ ] Player session tracking
 - [X] Create database connection module
+  - [X] Configure charset and collation settings
 - [X] Implement basic CRUD operations
 - [X] Create data migration strategy
   - [X] Create migration files for all tables
@@ -54,15 +65,23 @@
 ### Data Collection
 - [X] Identify key data points to collect from Squad servers
 - [X] Implement event listeners for game events
+  - [X] Player damage events
+  - [X] Player death events
+  - [X] Player wound events
+  - [X] Player revive events
 - [X] Set up data normalization and cleaning
+  - [X] Implement player name sanitization
+  - [X] Enhance player identification extraction
 - [X] Implement data buffering system
   - [X] Design buffer strategy for high-volume events
   - [X] Implement batch processing
   - [X] Add buffer overflow protection
+  - [X] Enhance event buffer logic for weapon tracking
 - [X] Create data validation system
   - [X] Add input validation for all models
   - [X] Implement data integrity checks
   - [X] Create validation error reporting
+  - [X] Add enhanced logging for events
 
 ### Data Storage
 - [X] Implement player data storage
@@ -74,6 +93,12 @@
   - [X] Add player lookup indexes
 - [ ] Create data backup system
 - [ ] Implement data pruning for old records
+  - [X] Set up scheduled pruning for player_wounded data
+  - [ ] Implement pruning for player_damage events
+  - [ ] Implement pruning for player_death events
+  - [ ] Implement pruning for player_revive events
+  - [ ] Create retention policy configuration
+  - [ ] Add pruning for inactive player records
 - [ ] Add data aggregation for statistics
 
 ## Phase 3: Core Bot Features
