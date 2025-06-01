@@ -38,5 +38,12 @@ module.exports = (sequelize) => {
     tableName: 'kills',
     underscored: true // Align with player_wounded
   });
+
+  Kill.associate = (models) => {
+    Kill.belongsTo(models.Player, { as: 'attacker', foreignKey: 'attacker_id' });
+    Kill.belongsTo(models.Player, { as: 'victim', foreignKey: 'victim_id' });
+    Kill.belongsTo(models.Weapon, { foreignKey: 'weapon_id' });
+  };
+
   return Kill;
 };

@@ -29,5 +29,11 @@ module.exports = (sequelize) => {
     tableName: 'revives',
     underscored: true // Matches player_wounded and kills
   });
+
+  Revive.associate = (models) => {
+    Revive.belongsTo(models.Player, { as: 'reviver', foreignKey: 'reviver_id' });
+    Revive.belongsTo(models.Player, { as: 'victim', foreignKey: 'victim_id' });
+  };
+
   return Revive;
 };

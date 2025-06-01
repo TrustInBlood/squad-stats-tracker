@@ -1,5 +1,6 @@
 const logger = require('../utils/logger');
 const { InteractionResponseFlags } = require('discord.js');
+const { sequelize } = require('../database/connection');
 
 module.exports = {
     name: 'interactionCreate',
@@ -30,7 +31,7 @@ module.exports = {
         }
 
         try {
-            await command.execute(interaction);
+            await command.execute(interaction, sequelize);
             logger.debug(`Command ${interaction.commandName} executed by ${interaction.user.tag}`);
         } catch (error) {
             logger.error(`Error executing ${interaction.commandName}:`, error);

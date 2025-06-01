@@ -26,4 +26,18 @@ More detailed setup and configuration instructions will be added as the project 
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details. 
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Database: Drop and Recreate with Correct Encoding
+
+If you need to reset your MariaDB database and ensure it uses full Unicode support, you can use the following command:
+
+```sh
+mysql -u root -p -e "DROP DATABASE squad_stats; CREATE DATABASE squad_stats CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+```
+
+After recreating the database, run your migrations to set up the tables:
+
+```sh
+npm run migrate
+``` 
