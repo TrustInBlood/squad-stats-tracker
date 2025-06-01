@@ -1,20 +1,32 @@
-// database/index.js
-const { sequelize } = require('../config/database');
-const Player = require('./player')(sequelize);
-const Server = require('./server')(sequelize);
-const PlayerDamage = require('./player-damage')(sequelize);
-const PlayerDeath = require('./player-death')(sequelize);
-const PlayerWound = require('./player-wound')(sequelize);
-const PlayerRevive = require('./player-revive')(sequelize);
-const DiscordSteamLink = require('./discord-steam-link')(sequelize);
+'use strict';
+
+const fs = require('fs');
+const path = require('path');
+const Sequelize = require('sequelize'); // Import Sequelize constructor
+const { sequelize } = require('../connection'); // Import sequelize instance
+
+const models = {};
+
+fs.readdirSync(__dirname)
+  .filter(file => {
+    return (
+      file.indexOf('.') !== 0 &&
+      file !== 'index.js' &&
+      file.slice(-3) === '.js'
+    );
+  })
+  .forEach(file => {
+    const model = require(path.join(__dirname, file))(sequelize, Sequelize.DataTypes);
+    models[model.name] = model;
+  });
+
+Object.keys(models).forEach(modelName => {
+  if (models[modelName].associate) {
+    models[modelName].associate(models);
+  }
+});
 
 module.exports = {
-  Player,
-  Server,
-  PlayerDamage,
-  PlayerDeath,
-  PlayerWound,
-  PlayerRevive,
-  DiscordSteamLink,
-  sequelize  // Export sequelize instance
+  sequelize,
+  ...models
 };
