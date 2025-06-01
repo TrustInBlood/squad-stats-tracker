@@ -277,10 +277,20 @@ class EventBuffer {
         if (verification.interaction_token && verification.application_id) {
           try {
             const { editOriginalInteractionResponse } = require('./discord-webhook');
+            const embed = {
+              title: 'Link Successful!',
+              description: 'Your Squad account has been successfully linked to your Discord account.',
+              color: 0x57F287, // Discord green
+              fields: [
+                { name: 'What happens next?', value: 'You can now use all Squad Stats features linked to your Discord account.' }
+              ],
+              footer: { text: 'If you have any issues, contact a server admin.' }
+            };
             await editOriginalInteractionResponse(
               verification.application_id,
               verification.interaction_token,
-              'Link successful! Your Squad account has been linked to your Discord account.'
+              null,
+              embed
             );
           } catch (err) {
             logger.error('Failed to update original ephemeral message via webhook:', err);
