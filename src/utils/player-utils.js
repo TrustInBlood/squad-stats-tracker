@@ -22,6 +22,22 @@ function sanitizePlayerName(name) {
 
 function extractPlayerData(eventData) {
   const { attacker, victim, player } = eventData;
+  logger.debug('Extracting player data:', { 
+    hasAttacker: !!attacker, 
+    hasVictim: !!victim, 
+    hasPlayer: !!player,
+    attackerData: attacker ? {
+      name: attacker.name,
+      steamID: attacker.steamID,
+      eosID: attacker.eosID
+    } : null,
+    victimData: victim ? {
+      name: victim.name,
+      steamID: victim.steamID,
+      eosID: victim.eosID
+    } : null
+  });
+  
   if (!attacker && !victim && !player) {
     logger.warn('Skipping event: No attacker, victim, or player data', { eventData });
     return null;
@@ -30,6 +46,12 @@ function extractPlayerData(eventData) {
 }
 
 async function upsertPlayer(event, transaction = null) {
+  logger.debug('Starting upsertPlayer for event:', { 
+    eventType: event.event,
+    hasData: !!event.data,
+    dataKeys: event.data ? Object.keys(event.data) : []
+  });
+
   const playerData = extractPlayerData(event.data);
   if (!playerData) {
     logger.warn('No player data extracted, skipping upsert', { event });
@@ -38,27 +60,61 @@ async function upsertPlayer(event, transaction = null) {
 
   const { attacker, victim, player } = playerData;
   const playersToUpsert = [];
+  
+  logger.debug('Processing players to upsert:', {
+    hasAttacker: !!attacker,
+    hasVictim: !!victim,
+    hasPlayer: !!player
+  });
+
   if (attacker) {
-    playersToUpsert.push({
+    const attackerData = {
       ...attacker,
       steamID: event.data.attackerSteamID || attacker.steamID,
       eosID: event.data.attackerEOSID || attacker.eosID
+    };
+    logger.debug('Adding attacker to upsert list:', {
+      name: attackerData.name,
+      steamID: attackerData.steamID,
+      eosID: attackerData.eosID
     });
+    playersToUpsert.push(attackerData);
   }
   if (victim) {
-    playersToUpsert.push({
+    const victimData = {
       ...victim,
       steamID: event.data.victimSteamID || victim.steamID,
       eosID: event.data.victimEOSID || victim.eosID
+    };
+    logger.debug('Adding victim to upsert list:', {
+      name: victimData.name,
+      steamID: victimData.steamID,
+      eosID: victimData.eosID
     });
+    playersToUpsert.push(victimData);
   }
   if (player) {
-    playersToUpsert.push({
+    const playerData = {
       ...player,
       steamID: event.data.steamID || player.steamID,
       eosID: event.data.eosID || player.eosID
+    };
+    logger.debug('Adding player to upsert list:', {
+      name: playerData.name,
+      steamID: playerData.steamID,
+      eosID: playerData.eosID
     });
+    playersToUpsert.push(playerData);
   }
+
+  logger.debug('Players to upsert:', {
+    count: playersToUpsert.length,
+    players: playersToUpsert.map(p => ({
+      name: p.name,
+      steamID: p.steamID,
+      eosID: p.eosID
+    }))
+  });
 
   const playerIds = [];
   for (const player of playersToUpsert) {
@@ -83,43 +139,21 @@ async function upsertPlayer(event, transaction = null) {
       continue;
     }
 
-    const timestamp = event.timestamp ? new Date(event.timestamp) : new Date();
-    if (isNaN(timestamp)) {
-      logger.warn('Invalid timestamp, using current time', { timestamp: event.timestamp });
-      timestamp = new Date();
-    }
-
     try {
       logger.info('Attempting to upsert player:', {
         steamID: player.steamID,
         eosID: player.eosID,
         name: player.name,
         sanitizedName,
-        timestamp: timestamp.toISOString(),
         eventType: event.event,
       });
 
-      await Player.upsert({
-        steam_id: player.steamID,
-        eos_id: player.eosID,
-        last_known_name: sanitizedName,
-        first_seen: timestamp,
-        last_seen: timestamp,
-        created_at: timestamp,
-        updated_at: timestamp
-      }, {
-        conflictFields: ['steam_id'],
+      const record = await Player.upsertPlayer(
+        player.steamID,
+        player.eosID,
+        sanitizedName,
         transaction
-      });
-
-      const whereClause = {};
-      if (player.steamID) whereClause.steam_id = player.steamID;
-      if (player.eosID) whereClause.eos_id = player.eosID;
-
-      const record = await Player.findOne({
-        where: whereClause,
-        transaction
-      });
+      );
 
       logger.info('Player upserted', {
         playerId: record?.id,
