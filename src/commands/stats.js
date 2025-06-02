@@ -9,7 +9,12 @@ const COOLDOWN_MINUTES = 5;
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('stats')
-    .setDescription('Display your Squad stats'),
+    .setDescription('View your Squad stats or another player\'s stats by Steam ID')
+    .addStringOption(option =>
+      option.setName('steamid')
+        .setDescription('Steam ID to look up (optional, defaults to your linked account)')
+        .setRequired(false)),
+
   async execute(interaction) {
     await interaction.deferReply({ ephemeral: true });
 
@@ -18,6 +23,7 @@ module.exports = {
     try {
       const discordId = interaction.user.id;
       const commandName = 'stats';
+      const steamId = interaction.options.getString('steamid');
 
       // Check cooldown
       const cooldown = await CommandCooldown.findOne({
@@ -39,18 +45,33 @@ module.exports = {
         return interaction.editReply(`Please wait ${minutes} minutes and ${seconds} seconds before using this command again.`);
       }
 
-      // Check if user is linked
-      const link = await PlayerDiscordLink.findOne({ 
-        where: { discord_id: discordId },
-        transaction 
-      });
-      
-      if (!link) {
-        await transaction.rollback();
-        return interaction.editReply('You must link your Squad account first using /squadlink.');
-      }
+      let playerId;
+      if (steamId) {
+        // Look up player by Steam ID
+        const player = await Player.findOne({
+          where: { steam_id: steamId },
+          transaction
+        });
 
-      const playerId = link.player_id;
+        if (!player) {
+          await transaction.rollback();
+          return interaction.editReply('No player found with that Steam ID.');
+        }
+        playerId = player.id;
+      } else {
+        // Check if user is linked
+        const link = await PlayerDiscordLink.findOne({ 
+          where: { discord_id: discordId },
+          transaction
+        });
+
+        if (!link) {
+          await transaction.rollback();
+          return interaction.editReply('You must link your Squad account first using /squadlink or provide a Steam ID.');
+        }
+
+        playerId = link.player_id;
+      }
 
       // Fetch stats
       const kills = await Kill.count({ where: { attacker_id: playerId }, transaction });
@@ -73,10 +94,14 @@ module.exports = {
       const nemesis = nemesisData.length > 0 ? nemesisData[0].attacker.last_known_name : 'None';
       const kdRatio = deaths > 0 ? (kills / deaths).toFixed(2) : kills.toFixed(2);
 
+      // Get player info for display
+      const player = await Player.findByPk(playerId, { transaction });
+
       // Create embed
       const embed = new EmbedBuilder()
-        .setTitle('Squad Stats')
+        .setTitle(`Stats for ${player.last_known_name}`)
         .setColor('#00ff00')
+        .setDescription(`Steam ID: ${player.steam_id}`)
         .addFields(
           { name: 'Kills', value: kills.toString(), inline: true },
           { name: 'Deaths', value: deaths.toString(), inline: true },
@@ -86,7 +111,7 @@ module.exports = {
           { name: 'Revives Received', value: revivesReceived.toString(), inline: true },
           { name: 'Nemesis', value: nemesis, inline: true }
         )
-        .setTimestamp();
+        .setFooter({ text: `Last seen: ${player.last_seen.toLocaleString()}` });
 
       // Update or create cooldown
       await CommandCooldown.upsert({
@@ -100,6 +125,7 @@ module.exports = {
 
       await interaction.editReply({ embeds: [embed] });
       logger.info(`Stats displayed for player_id: ${playerId}`);
+
     } catch (error) {
       await transaction.rollback();
       logger.error(`Error fetching stats: ${error.message}`);
