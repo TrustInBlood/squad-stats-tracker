@@ -19,12 +19,24 @@ const client = new Client({
 });
 
 client.commands = new Collection();
-client.serverManager = new ServerManager(client); // Pass client to ServerManager
+client.serverManager = new ServerManager(client);
+
+// Track initialization state
+let dbInitialized = false;
+
+// Initialize leaderboard when both database and client are ready
+async function initializeLeaderboard() {
+  if (dbInitialized && client.isReady()) {
+    logger.info('Both database and client are ready, initializing leaderboard...');
+    initLeaderboardCron(client, sequelize);
+  }
+}
 
 Promise.all([
   initializeDatabase(),
   client.serverManager.connectToAllServers(),
-]).then(async ([dbInitialized, _]) => {
+]).then(async ([dbInitResult, _]) => {
+  dbInitialized = dbInitResult;
   if (!dbInitialized) {
     logger.info('Bot is running in degraded mode - database features will be unavailable');
   } else {
@@ -32,10 +44,8 @@ Promise.all([
       await initializeWeaponCache();
       logger.info('Weapon cache initialized successfully');
       startScheduler();
-      // Initialize leaderboard after database is ready
-      client.once('ready', () => {
-        initLeaderboardCron(client, sequelize);
-      });
+      // Check if we can initialize leaderboard now
+      initializeLeaderboard();
     } catch (error) {
       logger.error('Failed to initialize weapon cache, running without weapon caching:', error);
     }
@@ -47,6 +57,12 @@ Promise.all([
   logger.info('Bot is running in degraded mode - some features may be unavailable');
   require('./handlers/commands')(client);
   require('./handlers/events')(client);
+});
+
+// Initialize leaderboard when client becomes ready
+client.once('ready', () => {
+  logger.info('Discord client is ready, checking if we can initialize leaderboard...');
+  initializeLeaderboard();
 });
 
 process.on('unhandledRejection', error => {

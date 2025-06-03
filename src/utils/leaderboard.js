@@ -1,6 +1,66 @@
 const { EmbedBuilder } = require('discord.js');
 const cron = require('node-cron');
 const logger = require('./logger');
+const { Op } = require('sequelize');
+
+// Configuration constants
+const LEADERBOARD_TYPES = {
+  '24h': {
+    name: '24-Hour',
+    hours: 24,
+    cronInterval: 60 // minutes
+  },
+  '7d': {
+    name: '7-Day',
+    hours: 168,
+    cronInterval: 360 // minutes (6 hours)
+  }
+};
+
+/**
+ * Validates leaderboard parameters
+ * @param {string} leaderboardType - Type of leaderboard
+ * @param {string} timeRange - Time range for stats
+ * @returns {boolean} Whether parameters are valid
+ */
+function validateLeaderboardParams(leaderboardType, timeRange) {
+  if (!LEADERBOARD_TYPES[leaderboardType]) {
+    logger.error(`Invalid leaderboard type: ${leaderboardType}`);
+    return false;
+  }
+  if (!LEADERBOARD_TYPES[timeRange]) {
+    logger.error(`Invalid time range: ${timeRange}`);
+    return false;
+  }
+  return true;
+}
+
+/**
+ * Cleans up old leaderboard messages in the channel
+ * @param {TextChannel} channel - Discord channel
+ * @param {LeaderboardConfig} config - Leaderboard config
+ */
+async function cleanupOldMessages(channel, config) {
+  try {
+    // Get all messages in the channel
+    const messages = await channel.messages.fetch({ limit: 100 });
+    
+    // Find messages that are leaderboard embeds but not our current one
+    const oldMessages = messages.filter(msg => 
+      msg.author.id === channel.client.user.id && 
+      msg.embeds.length > 0 &&
+      msg.embeds[0].title?.includes('Squad Leaderboard') &&
+      msg.id !== config.message_id
+    );
+
+    if (oldMessages.size > 0) {
+      logger.info(`Cleaning up ${oldMessages.size} old leaderboard messages`);
+      await channel.bulkDelete(oldMessages);
+    }
+  } catch (error) {
+    logger.error('Error cleaning up old leaderboard messages:', error);
+  }
+}
 
 /**
  * Updates the leaderboard message with top killers and revivers
@@ -10,6 +70,10 @@ const logger = require('./logger');
  * @param {string} timeRange - Time range for stats (e.g., "24h", "7d")
  */
 async function updateLeaderboard(client, sequelize, leaderboardType = "24h", timeRange = "24h") {
+  if (!validateLeaderboardParams(leaderboardType, timeRange)) {
+    return;
+  }
+
   try {
     const { Kill, Revive, Player, LeaderboardConfig } = sequelize.models;
     const channelId = process.env.LEADERBOARD_CHANNEL_ID;
@@ -25,95 +89,119 @@ async function updateLeaderboard(client, sequelize, leaderboardType = "24h", tim
       defaults: { channel_id: channelId, leaderboard_type: leaderboardType }
     });
 
-    // Get top killers
-    const topKillers = await Kill.findAll({
-      attributes: [
-        'attacker_id',
-        [sequelize.fn('COUNT', sequelize.col('Kill.id')), 'kill_count']
-      ],
-      include: [{
-        model: Player,
-        as: 'attacker',
-        attributes: ['last_known_name']
-      }],
-      where: sequelize.literal(`Kill.created_at >= DATE_SUB(NOW(), INTERVAL ${timeRange === "24h" ? "24" : "168"} HOUR)`),
-      group: ['Kill.attacker_id', 'attacker.id', 'attacker.last_known_name'],
-      order: [[sequelize.literal('kill_count'), 'DESC']],
-      limit: 10
-    });
-
-    // Get top revivers
-    const topRevivers = await Revive.findAll({
-      attributes: [
-        'reviver_id',
-        [sequelize.fn('COUNT', sequelize.col('Revive.id')), 'revive_count']
-      ],
-      include: [{
-        model: Player,
-        as: 'reviver',
-        attributes: ['last_known_name']
-      }],
-      where: sequelize.literal(`Revive.created_at >= DATE_SUB(NOW(), INTERVAL ${timeRange === "24h" ? "24" : "168"} HOUR)`),
-      group: ['Revive.reviver_id', 'reviver.id', 'reviver.last_known_name'],
-      order: [[sequelize.literal('revive_count'), 'DESC']],
-      limit: 10
-    });
-
-    // Create embed
-    const embed = new EmbedBuilder()
-      .setTitle(`${timeRange === "24h" ? "24-Hour" : "7-Day"} Squad Leaderboard`)
-      .setColor('#00ff00')
-      .addFields(
-        {
-          name: 'Top Killers',
-          value: topKillers.map((kill, index) => 
-            `${index + 1}. ${kill.attacker?.last_known_name || 'Unknown'}: ${kill.getDataValue('kill_count')} kills`
-          ).join('\n') || 'No kills recorded',
-          inline: true
-        },
-        {
-          name: 'Top Revivers',
-          value: topRevivers.map((revive, index) => 
-            `${index + 1}. ${revive.reviver?.last_known_name || 'Unknown'}: ${revive.getDataValue('revive_count')} revives`
-          ).join('\n') || 'No revives recorded',
-          inline: true
-        }
-      )
-      .setFooter({ text: `Last updated` })
-      .setTimestamp();
-
-    const channel = await client.channels.fetch(channelId);
-    if (!channel) {
-      logger.error(`Leaderboard channel ${channelId} not found`);
-      return;
-    }
+    const hours = LEADERBOARD_TYPES[timeRange].hours;
+    const cutoffTime = new Date(Date.now() - (hours * 60 * 60 * 1000));
 
     try {
-      if (config.message_id) {
-        const message = await channel.messages.fetch(config.message_id).catch(() => null);
-        if (message) {
-          await message.edit({ embeds: [embed] });
-          logger.info(`Updated existing leaderboard message for ${leaderboardType}`);
-          return;
-        }
+      // Get top killers using parameterized query
+      const topKillers = await Kill.findAll({
+        attributes: [
+          'attacker_id',
+          [sequelize.fn('COUNT', sequelize.col('Kill.id')), 'kill_count']
+        ],
+        include: [{
+          model: Player,
+          as: 'attacker',
+          attributes: ['last_known_name']
+        }],
+        where: {
+          created_at: {
+            [Op.gte]: cutoffTime
+          }
+        },
+        group: ['Kill.attacker_id', 'attacker.id', 'attacker.last_known_name'],
+        order: [[sequelize.literal('kill_count'), 'DESC']],
+        limit: 10
+      });
+
+      // Get top revivers using parameterized query
+      const topRevivers = await Revive.findAll({
+        attributes: [
+          'reviver_id',
+          [sequelize.fn('COUNT', sequelize.col('Revive.id')), 'revive_count']
+        ],
+        include: [{
+          model: Player,
+          as: 'reviver',
+          attributes: ['last_known_name']
+        }],
+        where: {
+          created_at: {
+            [Op.gte]: cutoffTime
+          }
+        },
+        group: ['Revive.reviver_id', 'reviver.id', 'reviver.last_known_name'],
+        order: [[sequelize.literal('revive_count'), 'DESC']],
+        limit: 10
+      });
+
+      // Create embed
+      const embed = new EmbedBuilder()
+        .setTitle(`${LEADERBOARD_TYPES[timeRange].name} Squad Leaderboard`)
+        .setColor('#00ff00')
+        .addFields(
+          {
+            name: 'Top Killers',
+            value: topKillers.map((kill, index) => 
+              `${index + 1}. ${kill.attacker?.last_known_name || 'Unknown'}: ${kill.getDataValue('kill_count')} kills`
+            ).join('\n') || 'No kills recorded',
+            inline: true
+          },
+          {
+            name: 'Top Revivers',
+            value: topRevivers.map((revive, index) => 
+              `${index + 1}. ${revive.reviver?.last_known_name || 'Unknown'}: ${revive.getDataValue('revive_count')} revives`
+            ).join('\n') || 'No revives recorded',
+            inline: true
+          }
+        )
+        .setFooter({ text: `Last updated` })
+        .setTimestamp();
+
+      const channel = await client.channels.fetch(channelId);
+      if (!channel) {
+        throw new Error(`Leaderboard channel ${channelId} not found`);
       }
-      // If no message_id or message not found, send new message
-      const newMessage = await channel.send({ embeds: [embed] });
-      await config.update({ message_id: newMessage.id });
-      logger.info(`Created new leaderboard message for ${leaderboardType}`);
-    } catch (error) {
-      logger.error(`Error updating leaderboard message: ${error.message}`);
-      // If message update fails, try to send new message
+
+      // Clean up old messages before updating
+      await cleanupOldMessages(channel, config);
+
       try {
+        if (config.message_id) {
+          const message = await channel.messages.fetch(config.message_id).catch(() => null);
+          if (message) {
+            await message.edit({ embeds: [embed] });
+            logger.info(`Updated existing leaderboard message for ${leaderboardType}`);
+            return;
+          }
+        }
+        // If no message_id or message not found, send new message
         const newMessage = await channel.send({ embeds: [embed] });
         await config.update({ message_id: newMessage.id });
-        logger.info(`Created new leaderboard message after error for ${leaderboardType}`);
-      } catch (retryError) {
-        logger.error(`Failed to create new leaderboard message: ${retryError.message}`);
+        logger.info(`Created new leaderboard message for ${leaderboardType}`);
+      } catch (discordError) {
+        logger.error(`Discord API error updating leaderboard message: ${discordError.message}`);
+        // If message update fails, try to send new message
+        try {
+          const newMessage = await channel.send({ embeds: [embed] });
+          await config.update({ message_id: newMessage.id });
+          logger.info(`Created new leaderboard message after error for ${leaderboardType}`);
+        } catch (retryError) {
+          logger.error(`Failed to create new leaderboard message: ${retryError.message}`);
+        }
       }
+    } catch (dbError) {
+      logger.error(`Database error in updateLeaderboard: ${dbError.message}`);
+      throw dbError; // Re-throw to be caught by outer try-catch
     }
   } catch (error) {
-    logger.error(`Error in updateLeaderboard: ${error.message}`);
+    if (error.name === 'SequelizeDatabaseError') {
+      logger.error(`Database error in updateLeaderboard: ${error.message}`);
+    } else if (error.name === 'DiscordAPIError') {
+      logger.error(`Discord API error in updateLeaderboard: ${error.message}`);
+    } else {
+      logger.error(`Unexpected error in updateLeaderboard: ${error.message}`);
+    }
   }
 }
 
@@ -123,22 +211,52 @@ async function updateLeaderboard(client, sequelize, leaderboardType = "24h", tim
  * @param {Sequelize} sequelize - Sequelize instance
  */
 function initLeaderboardCron(client, sequelize) {
-  // Get interval from env var or default to hourly
-  const intervalMinutes = parseInt(process.env.LEADERBOARD_INTERVAL_MINUTES) || 60;
-  const cronSchedule = `0 */${intervalMinutes} * * *`;
+  try {
+    // Get interval from env var or use the configured interval for 24h leaderboard
+    const intervalMinutes = parseInt(process.env.LEADERBOARD_INTERVAL_MINUTES) || 
+                           LEADERBOARD_TYPES['24h'].cronInterval;
+    
+    // For minute-based intervals, use a different cron format
+    const cronSchedule = intervalMinutes === 1 
+      ? '* * * * *'  // Every minute
+      : `*/${intervalMinutes} * * * *`;  // Every X minutes
+    
+    logger.info(`Setting up leaderboard cron job with schedule: ${cronSchedule} (every ${intervalMinutes} minutes)`);
 
-  // Run immediately on startup
-  updateLeaderboard(client, sequelize);
+    // Run immediately on startup
+    logger.info('Running initial leaderboard update...');
+    updateLeaderboard(client, sequelize).catch(error => {
+      logger.error('Failed to run initial leaderboard update:', error);
+    });
 
-  // Schedule regular updates
-  cron.schedule(cronSchedule, () => {
-    updateLeaderboard(client, sequelize);
-  });
+    // Schedule regular updates
+    const job = cron.schedule(cronSchedule, () => {
+      logger.info('Running scheduled leaderboard update...');
+      updateLeaderboard(client, sequelize).catch(error => {
+        logger.error('Failed to run scheduled leaderboard update:', error);
+      });
+    }, {
+      scheduled: true,
+      timezone: "UTC"
+    });
 
-  logger.info(`Leaderboard cron job initialized with schedule: ${cronSchedule}`);
+    if (!job) {
+      logger.error('Failed to create leaderboard cron job');
+      return;
+    }
+
+    if (!job.running) {
+      job.start();
+    }
+
+    logger.info('Leaderboard cron job successfully scheduled');
+  } catch (error) {
+    logger.error('Failed to initialize leaderboard cron job:', error);
+  }
 }
 
 module.exports = {
   updateLeaderboard,
-  initLeaderboardCron
+  initLeaderboardCron,
+  LEADERBOARD_TYPES // Export for testing/configuration
 }; 
