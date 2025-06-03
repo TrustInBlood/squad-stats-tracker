@@ -63,7 +63,7 @@ async function cleanupOldMessages(channel, config) {
 }
 
 /**
- * Updates the leaderboard message with top killers and revivers
+ * Updates the leaderboard message with top killers, revivers, and knife kills
  * @param {Client} client - Discord.js client
  * @param {Sequelize} sequelize - Sequelize instance
  * @param {string} leaderboardType - Type of leaderboard (e.g., "24h", "7d")
@@ -75,7 +75,7 @@ async function updateLeaderboard(client, sequelize, leaderboardType = "24h", tim
   }
 
   try {
-    const { Kill, Revive, Player, LeaderboardConfig } = sequelize.models;
+    const { Kill, Revive, Player, LeaderboardConfig, Weapon } = sequelize.models;
     const channelId = process.env.LEADERBOARD_CHANNEL_ID;
 
     if (!channelId) {
@@ -135,7 +135,39 @@ async function updateLeaderboard(client, sequelize, leaderboardType = "24h", tim
         limit: 10
       });
 
-      // Create embed
+      // Get top knife killers
+      const topKnifeKillers = await Kill.findAll({
+        attributes: [
+          'attacker_id',
+          [sequelize.fn('COUNT', sequelize.col('Kill.id')), 'knife_kill_count']
+        ],
+        include: [
+          {
+            model: Player,
+            as: 'attacker',
+            attributes: ['last_known_name']
+          },
+          {
+            model: Weapon,
+            required: true,
+            where: {
+              name: {
+                [Op.like]: '%bayonet%'
+              }
+            }
+          }
+        ],
+        where: {
+          created_at: {
+            [Op.gte]: cutoffTime
+          }
+        },
+        group: ['Kill.attacker_id', 'attacker.id', 'attacker.last_known_name'],
+        order: [[sequelize.literal('knife_kill_count'), 'DESC']],
+        limit: 10
+      });
+
+      // Create embed with three fields
       const embed = new EmbedBuilder()
         .setTitle(`${LEADERBOARD_TYPES[timeRange].name} Squad Leaderboard`)
         .setColor('#00ff00')
@@ -152,6 +184,13 @@ async function updateLeaderboard(client, sequelize, leaderboardType = "24h", tim
             value: topRevivers.map((revive, index) => 
               `${index + 1}. ${revive.reviver?.last_known_name || 'Unknown'}: ${revive.getDataValue('revive_count')} revives`
             ).join('\n') || 'No revives recorded',
+            inline: true
+          },
+          {
+            name: 'Top Knife Kills',
+            value: topKnifeKillers.map((kill, index) => 
+              `${index + 1}. ${kill.attacker?.last_known_name || 'Unknown'}: ${kill.getDataValue('knife_kill_count')} knife kills`
+            ).join('\n') || 'No knife kills recorded',
             inline: true
           }
         )
