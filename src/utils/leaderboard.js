@@ -93,6 +93,31 @@ async function updateLeaderboard(client, sequelize, leaderboardType = "24h", tim
     const cutoffTime = new Date(Date.now() - (hours * 60 * 60 * 1000));
 
     try {
+      // Get player statistics
+      const [totalPlayers, newPlayers, firstPlayer] = await Promise.all([
+        // Total tracked players
+        Player.count(),
+        // New players in last 24h
+        Player.count({
+          where: {
+            created_at: {
+              [Op.gte]: cutoffTime
+            }
+          }
+        }),
+        // First player record
+        Player.findOne({
+          order: [['created_at', 'ASC']],
+          attributes: ['created_at']
+        })
+      ]);
+
+      // Format the first player date
+      const firstPlayerDate = firstPlayer ? new Date(firstPlayer.created_at) : null;
+      const sinceText = firstPlayerDate 
+        ? `Since: <t:${Math.floor(firstPlayerDate.getTime() / 1000)}:F>`
+        : 'No player records';
+
       // Get top killers using parameterized query
       const topKillers = await Kill.findAll({
         attributes: [
@@ -167,7 +192,7 @@ async function updateLeaderboard(client, sequelize, leaderboardType = "24h", tim
         limit: 10
       });
 
-      // Create embed with three fields
+      // Create embed with all fields
       const embed = new EmbedBuilder()
         .setTitle(`${LEADERBOARD_TYPES[timeRange].name} Squad Leaderboard`)
         .setColor('#00ff00')
@@ -192,9 +217,14 @@ async function updateLeaderboard(client, sequelize, leaderboardType = "24h", tim
               `${index + 1}. ${kill.attacker?.last_known_name || 'Unknown'}: ${kill.getDataValue('knife_kill_count')} knife kills`
             ).join('\n') || 'No knife kills recorded',
             inline: true
+          },
+          {
+            name: 'Player Statistics',
+            value: `Total Tracked Players: ${totalPlayers.toLocaleString()} (${sinceText})\nNew Players (24h): ${newPlayers.toLocaleString()}`,
+            inline: false
           }
         )
-        .setFooter({ text: `Last updated` })
+        .setFooter({ text: 'Stats exclude KOTH mod servers • Last updated' })
         .setTimestamp();
 
       const channel = await client.channels.fetch(channelId);
