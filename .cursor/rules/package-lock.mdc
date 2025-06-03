@@ -1,6 +1,0 @@
----
-description: 
-globs: 
-alwaysApply: true
----
-Use the scripts in [package.json](mdc:package.json) to run console commands.
