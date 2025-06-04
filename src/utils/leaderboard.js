@@ -45,16 +45,16 @@ async function cleanupOldMessages(channel, config) {
     // Get all messages in the channel
     const messages = await channel.messages.fetch({ limit: 100 });
     
-    // Find messages that are leaderboard embeds but not our current one
+    // Find messages that are leaderboard embeds for this specific type but not our current one
     const oldMessages = messages.filter(msg => 
       msg.author.id === channel.client.user.id && 
       msg.embeds.length > 0 &&
-      msg.embeds[0].title?.includes('Squad Leaderboard') &&
+      msg.embeds[0].title?.includes(`${LEADERBOARD_TYPES[config.leaderboard_type].name} Squad Leaderboard`) &&
       msg.id !== config.message_id
     );
 
     if (oldMessages.size > 0) {
-      logger.info(`Cleaning up ${oldMessages.size} old leaderboard messages`);
+      logger.info(`Cleaning up ${oldMessages.size} old ${config.leaderboard_type} leaderboard messages`);
       await channel.bulkDelete(oldMessages);
     }
   } catch (error) {
@@ -232,32 +232,31 @@ async function updateLeaderboard(client, sequelize, leaderboardType = "24h", tim
         throw new Error(`Leaderboard channel ${channelId} not found`);
       }
 
-      // Clean up old messages before updating
-      await cleanupOldMessages(channel, config);
-
-      try {
-        if (config.message_id) {
+      // First try to update existing message if we have a message_id
+      if (config.message_id) {
+        try {
           const message = await channel.messages.fetch(config.message_id).catch(() => null);
           if (message) {
             await message.edit({ embeds: [embed] });
             logger.info(`Updated existing leaderboard message for ${leaderboardType}`);
             return;
           }
+        } catch (discordError) {
+          logger.error(`Discord API error updating existing leaderboard message: ${discordError.message}`);
         }
-        // If no message_id or message not found, send new message
+      }
+
+      // If we couldn't update the existing message, clean up old messages and create a new one
+      await cleanupOldMessages(channel, config);
+
+      try {
+        // Send new message
         const newMessage = await channel.send({ embeds: [embed] });
         await config.update({ message_id: newMessage.id });
         logger.info(`Created new leaderboard message for ${leaderboardType}`);
       } catch (discordError) {
-        logger.error(`Discord API error updating leaderboard message: ${discordError.message}`);
-        // If message update fails, try to send new message
-        try {
-          const newMessage = await channel.send({ embeds: [embed] });
-          await config.update({ message_id: newMessage.id });
-          logger.info(`Created new leaderboard message after error for ${leaderboardType}`);
-        } catch (retryError) {
-          logger.error(`Failed to create new leaderboard message: ${retryError.message}`);
-        }
+        logger.error(`Discord API error creating new leaderboard message: ${discordError.message}`);
+        throw discordError;
       }
     } catch (dbError) {
       logger.error(`Database error in updateLeaderboard: ${dbError.message}`);
