@@ -97,7 +97,7 @@ async function updateLeaderboard(client, sequelize, leaderboardType = "24h", tim
       const [totalPlayers, newPlayers, firstPlayer] = await Promise.all([
         // Total tracked players
         Player.count(),
-        // New players in last 24h
+        // New players in the specified time range (e.g., 24h or 7d)
         Player.count({
           where: {
             created_at: {
@@ -220,7 +220,7 @@ async function updateLeaderboard(client, sequelize, leaderboardType = "24h", tim
           },
           {
             name: 'Player Statistics',
-            value: `Total Tracked Players: ${totalPlayers.toLocaleString()} (${sinceText})\nNew Players (24h): ${newPlayers.toLocaleString()}`,
+            value: `Total Tracked Players: ${totalPlayers.toLocaleString()} (${sinceText})\nNew Players (${LEADERBOARD_TYPES[timeRange].name}): ${newPlayers.toLocaleString()}`,
             inline: false
           }
         )
@@ -278,39 +278,46 @@ async function updateLeaderboard(client, sequelize, leaderboardType = "24h", tim
  * Initializes the leaderboard cron job
  * @param {Client} client - Discord.js client
  * @param {Sequelize} sequelize - Sequelize instance
+ * @param {string} leaderboardType - Type of leaderboard (e.g., "24h", "7d")
+ * @param {string} timeRange - Time range for stats (e.g., "24h", "7d")
  */
-function initLeaderboardCron(client, sequelize) {
+function initLeaderboardCron(client, sequelize, leaderboardType = '24h', timeRange = '24h') {
   try {
-    // Get interval from env var or use the configured interval for 24h leaderboard
-    const intervalMinutes = parseInt(process.env.LEADERBOARD_INTERVAL_MINUTES) || 
-                           LEADERBOARD_TYPES['24h'].cronInterval;
+    if (!validateLeaderboardParams(leaderboardType, timeRange)) {
+      logger.error(`Invalid parameters for cron job: ${leaderboardType}, ${timeRange}`);
+      return;
+    }
+
+    // Get interval from env var or use the configured interval for the leaderboard type
+    const intervalMinutes = parseInt(process.env[`LEADERBOARD_INTERVAL_${leaderboardType.toUpperCase()}_MINUTES`]) || 
+                           LEADERBOARD_TYPES[leaderboardType].cronInterval;
     
     // For minute-based intervals, use a different cron format
     const cronSchedule = intervalMinutes === 1 
       ? '* * * * *'  // Every minute
       : `*/${intervalMinutes} * * * *`;  // Every X minutes
     
-    logger.info(`Setting up leaderboard cron job with schedule: ${cronSchedule} (every ${intervalMinutes} minutes)`);
+    logger.info(`Setting up ${leaderboardType} leaderboard cron job with schedule: ${cronSchedule} (every ${intervalMinutes} minutes)`);
 
     // Run immediately on startup
-    logger.info('Running initial leaderboard update...');
-    updateLeaderboard(client, sequelize).catch(error => {
-      logger.error('Failed to run initial leaderboard update:', error);
+    logger.info(`Running initial ${leaderboardType} leaderboard update...`);
+    updateLeaderboard(client, sequelize, leaderboardType, timeRange).catch(error => {
+      logger.error(`Failed to run initial ${leaderboardType} leaderboard update:`, error);
     });
 
     // Schedule regular updates
     const job = cron.schedule(cronSchedule, () => {
-      logger.info('Running scheduled leaderboard update...');
-      updateLeaderboard(client, sequelize).catch(error => {
-        logger.error('Failed to run scheduled leaderboard update:', error);
+      logger.info(`Running scheduled ${leaderboardType} leaderboard update...`);
+      updateLeaderboard(client, sequelize, leaderboardType, timeRange).catch(error => {
+        logger.error(`Failed to run scheduled ${leaderboardType} leaderboard update:`, error);
       });
     }, {
       scheduled: true,
-      timezone: "UTC"
+      timezone: 'UTC'
     });
 
     if (!job) {
-      logger.error('Failed to create leaderboard cron job');
+      logger.error(`Failed to create ${leaderboardType} leaderboard cron job`);
       return;
     }
 
@@ -318,14 +325,14 @@ function initLeaderboardCron(client, sequelize) {
       job.start();
     }
 
-    logger.info('Leaderboard cron job successfully scheduled');
+    logger.info(`${leaderboardType} leaderboard cron job successfully scheduled`);
   } catch (error) {
-    logger.error('Failed to initialize leaderboard cron job:', error);
+    logger.error(`Failed to initialize ${leaderboardType} leaderboard cron job:`, error);
   }
 }
 
 module.exports = {
   updateLeaderboard,
   initLeaderboardCron,
-  LEADERBOARD_TYPES // Export for testing/configuration
-}; 
+  LEADERBOARD_TYPES
+};

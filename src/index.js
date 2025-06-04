@@ -1,4 +1,3 @@
-// src/index.js
 require('dotenv').config();
 const { Client, GatewayIntentBits, Collection } = require('discord.js');
 const logger = require('./utils/logger');
@@ -24,11 +23,14 @@ client.serverManager = new ServerManager(client);
 // Track initialization state
 let dbInitialized = false;
 
-// Initialize leaderboard when both database and client are ready
+// Initialize leaderboards when both database and client are ready
 async function initializeLeaderboard() {
   if (dbInitialized && client.isReady()) {
-    logger.info('Both database and client are ready, initializing leaderboard...');
-    initLeaderboardCron(client, sequelize);
+    logger.info('Both database and client are ready, initializing leaderboards...');
+    // Initialize 24-hour leaderboard
+    initLeaderboardCron(client, sequelize, '24h', '24h');
+    // Initialize 7-day leaderboard
+    initLeaderboardCron(client, sequelize, '7d', '7d');
   }
 }
 
@@ -44,7 +46,7 @@ Promise.all([
       await initializeWeaponCache();
       logger.info('Weapon cache initialized successfully');
       startScheduler();
-      // Check if we can initialize leaderboard now
+      // Check if we can initialize leaderboards now
       initializeLeaderboard();
     } catch (error) {
       logger.error('Failed to initialize weapon cache, running without weapon caching:', error);
@@ -59,9 +61,9 @@ Promise.all([
   require('./handlers/events')(client);
 });
 
-// Initialize leaderboard when client becomes ready
+// Initialize leaderboards when client becomes ready
 client.once('ready', () => {
-  logger.info('Discord client is ready, checking if we can initialize leaderboard...');
+  logger.info('Discord client is ready, checking if we can initialize leaderboards...');
   initializeLeaderboard();
 });
 
