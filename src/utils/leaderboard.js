@@ -222,6 +222,11 @@ async function updateLeaderboard(client, sequelize, leaderboardType = "24h", tim
             name: 'Player Statistics',
             value: `Total Tracked Players: ${totalPlayers.toLocaleString()} (${sinceText})\nNew Players (${LEADERBOARD_TYPES[timeRange].name}): ${newPlayers.toLocaleString()}`,
             inline: false
+          },
+          {
+            name: 'Need Help?',
+            value: 'Use `/help` to see all available commands and their descriptions. When using commands, make sure the bot profile picture matches the profile picture on this embed.',
+            inline: false
           }
         )
         .setFooter({ text: 'Stats exclude KOTH mod servers • Last updated' })

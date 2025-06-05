@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
 const { PlayerDiscordLink, Kill, Revive, Player, CommandCooldown } = require('../database/models');
 const { Op } = require('sequelize');
 const { sequelize } = require('../database/connection');
@@ -13,10 +13,22 @@ module.exports = {
     .addStringOption(option =>
       option.setName('steamid')
         .setDescription('Steam ID to look up (optional, defaults to your linked account)')
-        .setRequired(false)),
+        .setRequired(false))
+    .setDefaultMemberPermissions(PermissionFlagsBits.SendMessages),
 
   async execute(interaction) {
-    await interaction.deferReply({ ephemeral: true });
+    // Check if command is used in the correct channel
+    const allowedChannelId = process.env.STATS_CHANNEL_ID;
+    if (interaction.channelId !== allowedChannelId) {
+      const channel = interaction.client.channels.cache.get(allowedChannelId);
+      const channelMention = channel ? `<#${allowedChannelId}>` : 'the designated stats channel';
+      return interaction.reply({ 
+        content: `This command can only be used in ${channelMention}.`,
+        ephemeral: true 
+      });
+    }
+
+    await interaction.deferReply();
 
     const transaction = await sequelize.transaction();
 
@@ -101,7 +113,6 @@ module.exports = {
       const embed = new EmbedBuilder()
         .setTitle(`Stats for ${player.last_known_name}`)
         .setColor('#00ff00')
-        .setDescription(`Steam ID: ${player.steam_id}`)
         .addFields(
           { name: 'Kills', value: kills.toString(), inline: true },
           { name: 'Deaths', value: deaths.toString(), inline: true },
