@@ -293,15 +293,32 @@ function initLeaderboardCron(client, sequelize, leaderboardType = '24h', timeRan
     }
 
     // Get interval from env var or use the configured interval for the leaderboard type
-    const intervalMinutes = parseInt(process.env[`LEADERBOARD_INTERVAL_${leaderboardType.toUpperCase()}_MINUTES`]) || 
-                           LEADERBOARD_TYPES[leaderboardType].cronInterval;
+    const envVar = `LEADERBOARD_INTERVAL_${leaderboardType.toUpperCase()}_MINUTES`;
+    const envValue = process.env[envVar];
+    const defaultInterval = LEADERBOARD_TYPES[leaderboardType].cronInterval;
+    const intervalMinutes = envValue ? parseInt(envValue) : defaultInterval;
+    
+    logger.info(`[DEBUG] ${leaderboardType} leaderboard initialization:
+      - Environment variable ${envVar}: ${envValue || 'not set'}
+      - Default interval from LEADERBOARD_TYPES: ${defaultInterval}
+      - Final interval used: ${intervalMinutes}
+      - Current time: ${new Date().toISOString()}`);
     
     // For minute-based intervals, use a different cron format
-    const cronSchedule = intervalMinutes === 1 
-      ? '* * * * *'  // Every minute
-      : `*/${intervalMinutes} * * * *`;  // Every X minutes
+    let cronSchedule;
+    if (intervalMinutes === 1) {
+      cronSchedule = '* * * * *';  // Every minute
+    } else if (intervalMinutes < 60) {
+      cronSchedule = `*/${intervalMinutes} * * * *`;  // Every X minutes
+    } else if (intervalMinutes === 60) {
+      cronSchedule = '0 * * * *';  // Every hour
+    } else {
+      // For intervals longer than an hour, use the hour field
+      const hours = Math.floor(intervalMinutes / 60);
+      cronSchedule = `0 */${hours} * * *`;  // Every X hours
+    }
     
-    logger.info(`Setting up ${leaderboardType} leaderboard cron job with schedule: ${cronSchedule} (every ${intervalMinutes} minutes)`);
+    logger.info(`[DEBUG] ${leaderboardType} leaderboard cron schedule: ${cronSchedule} (every ${intervalMinutes} minutes)`);
 
     // Run immediately on startup
     logger.info(`Running initial ${leaderboardType} leaderboard update...`);
