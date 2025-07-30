@@ -16,5 +16,10 @@ module.exports = (sequelize) => {
     tableName: 'weapons',
     underscored: true
   });
+
+  Weapon.associate = (models) => {
+    Weapon.hasMany(models.Kill, { foreignKey: 'weapon_id' });
+  };
+
   return Weapon;
 };

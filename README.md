@@ -18,9 +18,26 @@ This project provides a comprehensive statistics tracking system for Squad gamep
 
 1. Clone the repository
 2. Copy `src/config/servers.example.js` to `src/config/servers.js` and configure your servers
-3. Create a `.env` file with required environment variables
-4. Install dependencies: `npm install`
-5. Start the bot: `npm start`
+3. Copy `src/config/roles.example.js` to `src/config/roles.js` and configure your Discord roles
+4. Create a `.env` file with required environment variables
+5. Install dependencies: `npm install`
+6. Start the bot: `npm start`
+
+### Role Configuration
+
+The bot uses a hierarchical role system for command permissions. To set up roles:
+
+1. Copy `src/config/roles.example.js` to `src/config/roles.js`
+2. Replace the placeholder role IDs with your actual Discord role IDs
+3. Customize the role hierarchy and command permissions as needed
+
+**Role Hierarchy:**
+- `staff` (level 1) - Basic admin commands
+- `admin` (level 2) - Server management commands  
+- `senior_admin` (level 3) - Database management commands
+- `head_admin` (level 4) - Bot configuration commands
+
+Higher-level roles automatically get access to lower-level commands.
 
 More detailed setup and configuration instructions will be added as the project develops.
 

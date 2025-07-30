@@ -118,6 +118,16 @@
   - [ ] Recent matches
   - [ ] Match details
   - [ ] Player performance in matches
+- [X] Implement killedby command
+  - [X] Show who killed a specific player in last 2-6 hours
+  - [X] Include weapon information and local timestamps
+  - [X] Staff-only permissions
+  - [X] Can be called in any channel
+- [X] Implement killed command
+  - [X] Show who a specific player has killed in last 2-6 hours
+  - [X] Include weapon information and local timestamps
+  - [X] Staff-only permissions
+  - [X] Can be called in any channel
 - [ ] Implement leaderboard commands
   - [ ] Global leaderboards
   - [ ] Server-specific leaderboards

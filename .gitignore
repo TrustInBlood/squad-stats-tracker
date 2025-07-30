@@ -49,3 +49,4 @@ src/config/servers.json
 src/config/servers.js
 src/config/*.local.json
 !src/config/servers.example.js
+src/config/roles.js

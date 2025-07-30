@@ -174,6 +174,7 @@ async function updateLeaderboard(client, sequelize, leaderboardType = "24h", tim
           },
           {
             model: Weapon,
+            as: 'weapon',
             required: true,
             where: {
               name: {
