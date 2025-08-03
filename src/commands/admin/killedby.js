@@ -7,7 +7,7 @@ const roleConfig = require('../../config/roles');
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('killedby')
-    .setDescription('Show who has killed a player in the last 2-6 hours')
+    .setDescription('Show who a player has killed in the last 2-6 hours')
     .addStringOption(option =>
       option.setName('steamid')
         .setDescription('Steam ID of the player to check')
@@ -58,10 +58,10 @@ module.exports = {
 
       const { Kill, Weapon } = sequelize.models;
       
-      // Get kills where this player was the victim
+      // Get kills where this player was the attacker
       const kills = await Kill.findAll({
         where: {
-          victim_id: player.id,
+          attacker_id: player.id,
           timestamp: {
             [Op.gte]: timeRange
           }
@@ -69,7 +69,7 @@ module.exports = {
         include: [
           {
             model: Player,
-            as: 'attacker',
+            as: 'victim',
             attributes: ['last_known_name']
           },
           {
@@ -89,33 +89,24 @@ module.exports = {
 
       // Create embed
       const embed = new EmbedBuilder()
-        .setTitle(`Who killed ${player.last_known_name}`)
+        .setTitle(`Who ${player.last_known_name} has killed`)
         .setDescription(`Last ${hours} hours (${timeRange.toLocaleString()} - ${now.toLocaleString()})`)
-        .setColor('#ff6b6b')
-        .setFooter({ text: `Total deaths: ${kills.length}` });
+        .setColor('#4ecdc4')
+        .setFooter({ text: `Total kills: ${kills.length}` });
 
       // Create a list of individual kills with timestamps
       const killList = kills.map(kill => {
-        const attackerName = kill.attacker?.last_known_name || 'Unknown';
+        const victimName = kill.victim?.last_known_name || 'Unknown';
         const weaponName = kill.weapon?.name || 'Unknown';
         const killTime = kill.timestamp.toLocaleString();
-        
-        // Debug logging
-        logger.debug('Kill data:', { 
-          killId: kill.id, 
-          weaponId: kill.weapon_id, 
-          weaponName: weaponName,
-          weaponObject: kill.weapon ? 'present' : 'null'
-        });
-        
-        return `**${killTime}** - ${attackerName} (${weaponName})`;
+        return `**${killTime}** - ${victimName} (${weaponName})`;
       });
 
       // Split kills into chunks to avoid embed field limits
       const chunkSize = 10;
       for (let i = 0; i < killList.length; i += chunkSize) {
         const chunk = killList.slice(i, i + chunkSize);
-        const fieldName = i === 0 ? 'Recent Deaths' : `Deaths (continued)`;
+        const fieldName = i === 0 ? 'Recent Kills' : `Kills (continued)`;
         
         embed.addFields({
           name: fieldName,
@@ -126,8 +117,8 @@ module.exports = {
 
       if (kills.length === 0) {
         embed.addFields({
-          name: 'No Deaths',
-          value: 'No deaths recorded in this time period.',
+          name: 'No Kills',
+          value: 'No kills recorded in this time period.',
           inline: false
         });
       }
