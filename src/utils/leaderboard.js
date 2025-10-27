@@ -230,7 +230,7 @@ async function updateLeaderboard(client, sequelize, leaderboardType = "24h", tim
             inline: false
           }
         )
-        .setFooter({ text: 'Stats exclude KOTH mod servers • Last updated' })
+        .setFooter({ text: 'Last updated' })
         .setTimestamp();
 
       const channel = await client.channels.fetch(channelId);

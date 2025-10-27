@@ -11,8 +11,6 @@ module.exports = (sequelize, DataTypes) => {
       Player.hasMany(models.Revive, { as: 'revivesReceived', foreignKey: 'victim_id' });
       Player.hasMany(models.PlayerWounded, { as: 'woundsGiven', foreignKey: 'attacker_id' });
       Player.hasMany(models.PlayerWounded, { as: 'woundsReceived', foreignKey: 'victim_id' });
-      Player.hasOne(models.PlayerDiscordLink, { foreignKey: 'player_id' });
-      Player.hasMany(models.UnlinkHistory, { foreignKey: 'player_id' });
     }
 
     // Static method to safely upsert a player

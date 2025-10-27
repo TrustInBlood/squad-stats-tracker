@@ -1,5 +1,5 @@
 const { SlashCommandBuilder, EmbedBuilder, PermissionFlagsBits } = require('discord.js');
-const { PlayerDiscordLink, Kill, Revive, Player, CommandCooldown } = require('../database/models');
+const { Kill, Revive, Player, CommandCooldown } = require('../database/models');
 const { Op } = require('sequelize');
 const { sequelize } = require('../database/connection');
 const logger = require('../utils/logger');
@@ -9,11 +9,11 @@ const COOLDOWN_MINUTES = 5;
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('stats')
-    .setDescription('View your Squad stats or another player\'s stats by Steam ID')
+    .setDescription('View Squad player stats by Steam ID')
     .addStringOption(option =>
       option.setName('steamid')
-        .setDescription('Steam ID to look up (optional, defaults to your linked account)')
-        .setRequired(false))
+        .setDescription('Steam ID to look up')
+        .setRequired(true))
     .setDefaultMemberPermissions(PermissionFlagsBits.SendMessages),
 
   async execute(interaction) {
@@ -57,33 +57,18 @@ module.exports = {
         return interaction.editReply(`Please wait ${minutes} minutes and ${seconds} seconds before using this command again.`);
       }
 
-      let playerId;
-      if (steamId) {
-        // Look up player by Steam ID
-        const player = await Player.findOne({
-          where: { steam_id: steamId },
-          transaction
-        });
+      // Look up player by Steam ID
+      const player = await Player.findOne({
+        where: { steam_id: steamId },
+        transaction
+      });
 
-        if (!player) {
-          await transaction.rollback();
-          return interaction.editReply('No player found with that Steam ID.');
-        }
-        playerId = player.id;
-      } else {
-        // Check if user is linked
-        const link = await PlayerDiscordLink.findOne({ 
-          where: { discord_id: discordId },
-          transaction
-        });
-
-        if (!link) {
-          await transaction.rollback();
-          return interaction.editReply('You must link your Squad account first using /squadlink or provide a Steam ID.');
-        }
-
-        playerId = link.player_id;
+      if (!player) {
+        await transaction.rollback();
+        return interaction.editReply('No player found with that Steam ID.');
       }
+
+      const playerId = player.id;
 
       // Fetch stats
       const kills = await Kill.count({ where: { attacker_id: playerId }, transaction });
@@ -105,9 +90,6 @@ module.exports = {
 
       const nemesis = nemesisData.length > 0 ? nemesisData[0].attacker.last_known_name : 'None';
       const kdRatio = deaths > 0 ? (kills / deaths).toFixed(2) : kills.toFixed(2);
-
-      // Get player info for display
-      const player = await Player.findByPk(playerId, { transaction });
 
       // Create embed
       const embed = new EmbedBuilder()

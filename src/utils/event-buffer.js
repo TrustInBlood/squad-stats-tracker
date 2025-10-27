@@ -1,8 +1,7 @@
 const fs = require('fs').promises;
 const path = require('path');
 const logger = require('./logger');
-const { sequelize, Sequelize } = require('../database/models'); // Keep only sequelize and Sequelize
-const { Op } = require('sequelize');
+const { sequelize } = require('../database/models');
 const { upsertPlayer } = require('./player-utils');
 const { getWeaponId } = require('./weapon-utils');
 
@@ -242,66 +241,10 @@ class EventBuffer {
           logger.warn('No players upserted for CHAT_MESSAGE', { event });
           continue;
         }
-  
-        const playerId = playerIds[0];
-        const message = event.data.message || '';
-        const match = message.match(/^!link\s+(\w{6})$/i);
-        if (!match) {
-          results.successful++;
-          results.created += playerIds.length;
-          continue;
-        }
-  
-        const code = match[1].toUpperCase();
-        const verification = await sequelize.models.VerificationCode.findOne({
-          where: { code, expires_at: { [Op.gt]: new Date() } },
-          transaction
-        });
-  
-        if (!verification) {
-          logger.info(`Invalid or expired verification code: ${code}`);
-          results.successful++;
-          results.created += playerIds.length;
-          continue;
-        }
-  
-        const discordId = verification.discord_id;
-        await sequelize.models.PlayerDiscordLink.destroy({ where: { player_id: playerId }, transaction }); // Ensure one link per player_id
-        await sequelize.models.PlayerDiscordLink.create({
-          player_id: playerId,
-          discord_id: discordId,
-          linked_at: new Date()
-        }, { transaction });
-  
-        // After successful link, update the original ephemeral message if possible
-        if (verification.interaction_token && verification.application_id) {
-          try {
-            const { editOriginalInteractionResponse } = require('./discord-webhook');
-            const embed = {
-              title: 'Link Successful!',
-              description: 'Your Squad account has been successfully linked to your Discord account.',
-              color: 0x57F287, // Discord green
-              fields: [
-                { name: 'What happens next?', value: 'You can now use all Squad Stats features linked to your Discord account.' }
-              ],
-              footer: { text: 'If you have any issues, contact a server admin.' }
-            };
-            await editOriginalInteractionResponse(
-              verification.application_id,
-              verification.interaction_token,
-              null,
-              embed
-            );
-          } catch (err) {
-            logger.error('Failed to update original ephemeral message via webhook:', err);
-          }
-        }
-        
-        await verification.destroy({ transaction });
-  
+
         results.successful++;
         results.created += playerIds.length;
-        logger.info('Linked player to Discord', { playerId, discordId });
+        logger.info('Upserted players from chat message', { playerIds });
       } catch (error) {
         results.failed++;
         results.errors.push({ event, error: error.message });
