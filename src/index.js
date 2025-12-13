@@ -7,6 +7,7 @@ const { sequelize } = require('./database/connection');
 const { initializeWeaponCache } = require('./utils/weapon-utils');
 const { startScheduler } = require('./utils/scheduler');
 const { initLeaderboardCron } = require('./utils/leaderboard');
+const { startApiServer } = require('./api/server');
 
 const client = new Client({
   intents: [
@@ -22,6 +23,7 @@ client.serverManager = new ServerManager(client);
 
 // Track initialization state
 let dbInitialized = false;
+let apiServer = null;
 
 // Initialize leaderboards when both database and client are ready
 async function initializeLeaderboard() {
@@ -46,6 +48,7 @@ Promise.all([
       await initializeWeaponCache();
       logger.info('Weapon cache initialized successfully');
       startScheduler();
+      apiServer = startApiServer();
       // Check if we can initialize leaderboards now
       initializeLeaderboard();
     } catch (error) {
@@ -74,6 +77,10 @@ process.on('unhandledRejection', error => {
 async function shutdown(signal) {
   logger.info(`Received ${signal}, starting graceful shutdown...`);
   try {
+    if (apiServer) {
+      await new Promise((resolve) => apiServer.close(resolve));
+      logger.info('API server closed');
+    }
     await client.serverManager.shutdown();
     if (client.isReady()) {
       client.destroy();
