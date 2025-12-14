@@ -1,5 +1,6 @@
 const { Kill, Revive, Player } = require('../database/models');
 const { sequelize } = require('../database/connection');
+const { Op } = require('sequelize');
 const logger = require('../utils/logger');
 
 async function getPlayerStats(steamId) {
@@ -26,7 +27,10 @@ async function getPlayerStats(steamId) {
 
     const nemesisData = await Kill.findAll({
       attributes: ['attacker_id'],
-      where: { victim_id: playerId },
+      where: {
+        victim_id: playerId,
+        attacker_id: { [Op.ne]: playerId }
+      },
       group: ['attacker_id'],
       order: [[sequelize.fn('COUNT', sequelize.col('attacker_id')), 'DESC']],
       limit: 1,
