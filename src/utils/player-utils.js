@@ -21,11 +21,12 @@ function sanitizePlayerName(name) {
 }
 
 function extractPlayerData(eventData) {
-  const { attacker, victim, player } = eventData;
-  logger.debug('Extracting player data:', { 
-    hasAttacker: !!attacker, 
-    hasVictim: !!victim, 
+  const { attacker, victim, player, reviver } = eventData;
+  logger.debug('Extracting player data:', {
+    hasAttacker: !!attacker,
+    hasVictim: !!victim,
     hasPlayer: !!player,
+    hasReviver: !!reviver,
     attackerData: attacker ? {
       name: attacker.name,
       steamID: attacker.steamID,
@@ -35,14 +36,19 @@ function extractPlayerData(eventData) {
       name: victim.name,
       steamID: victim.steamID,
       eosID: victim.eosID
+    } : null,
+    reviverData: reviver ? {
+      name: reviver.name,
+      steamID: reviver.steamID,
+      eosID: reviver.eosID
     } : null
   });
-  
-  if (!attacker && !victim && !player) {
-    logger.warn('Skipping event: No attacker, victim, or player data', { eventData });
+
+  if (!attacker && !victim && !player && !reviver) {
+    logger.warn('Skipping event: No attacker, victim, player, or reviver data', { eventData });
     return null;
   }
-  return { attacker, victim, player };
+  return { attacker, victim, player, reviver };
 }
 
 async function upsertPlayer(event, transaction = null) {
@@ -58,15 +64,30 @@ async function upsertPlayer(event, transaction = null) {
     return null;
   }
 
-  const { attacker, victim, player } = playerData;
+  const { attacker, victim, player, reviver } = playerData;
   const playersToUpsert = [];
-  
+
   logger.debug('Processing players to upsert:', {
     hasAttacker: !!attacker,
     hasVictim: !!victim,
-    hasPlayer: !!player
+    hasPlayer: !!player,
+    hasReviver: !!reviver
   });
 
+  // For PLAYER_REVIVED events, reviver comes first (like attacker in other events)
+  if (reviver) {
+    const reviverData = {
+      ...reviver,
+      steamID: event.data.reviverSteamID || reviver.steamID,
+      eosID: event.data.reviverEOSID || reviver.eosID
+    };
+    logger.debug('Adding reviver to upsert list:', {
+      name: reviverData.name,
+      steamID: reviverData.steamID,
+      eosID: reviverData.eosID
+    });
+    playersToUpsert.push(reviverData);
+  }
   if (attacker) {
     const attackerData = {
       ...attacker,
