@@ -19,8 +19,18 @@ function createApiServer() {
         return;
       }
 
+      let sinceDate = null;
+      if (parsedUrl.query.since) {
+        sinceDate = new Date(parsedUrl.query.since);
+        if (isNaN(sinceDate.getTime())) {
+          res.statusCode = 400;
+          res.end(JSON.stringify({ error: 'Invalid since parameter. Use ISO 8601 format (e.g., 2025-01-01T00:00:00Z)' }));
+          return;
+        }
+      }
+
       try {
-        const stats = await getPlayerStats(steamId);
+        const stats = await getPlayerStats(steamId, sinceDate);
 
         if (!stats) {
           res.statusCode = 404;

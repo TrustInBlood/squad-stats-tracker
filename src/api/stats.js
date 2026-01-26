@@ -3,7 +3,7 @@ const { sequelize } = require('../database/connection');
 const { Op } = require('sequelize');
 const logger = require('../utils/logger');
 
-async function getPlayerStats(steamId) {
+async function getPlayerStats(steamId, sinceDate = null) {
   const transaction = await sequelize.transaction();
 
   try {
@@ -18,18 +18,20 @@ async function getPlayerStats(steamId) {
     }
 
     const playerId = player.id;
+    const dateFilter = sinceDate ? { timestamp: { [Op.gte]: sinceDate } } : {};
 
-    const kills = await Kill.count({ where: { attacker_id: playerId }, transaction });
-    const deaths = await Kill.count({ where: { victim_id: playerId }, transaction });
-    const teamkills = await Kill.count({ where: { attacker_id: playerId, teamkill: true }, transaction });
-    const revivesGiven = await Revive.count({ where: { reviver_id: playerId }, transaction });
-    const revivesReceived = await Revive.count({ where: { victim_id: playerId }, transaction });
+    const kills = await Kill.count({ where: { attacker_id: playerId, ...dateFilter }, transaction });
+    const deaths = await Kill.count({ where: { victim_id: playerId, ...dateFilter }, transaction });
+    const teamkills = await Kill.count({ where: { attacker_id: playerId, teamkill: true, ...dateFilter }, transaction });
+    const revivesGiven = await Revive.count({ where: { reviver_id: playerId, ...dateFilter }, transaction });
+    const revivesReceived = await Revive.count({ where: { victim_id: playerId, ...dateFilter }, transaction });
 
     const nemesisData = await Kill.findAll({
       attributes: ['attacker_id'],
       where: {
         victim_id: playerId,
-        attacker_id: { [Op.ne]: playerId }
+        attacker_id: { [Op.ne]: playerId },
+        ...dateFilter
       },
       group: ['attacker_id'],
       order: [[sequelize.fn('COUNT', sequelize.col('attacker_id')), 'DESC']],
