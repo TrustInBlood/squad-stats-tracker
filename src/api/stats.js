@@ -1,4 +1,4 @@
-const { Kill, Revive, Player } = require('../database/models');
+const { Kill, Revive, Player, Weapon } = require('../database/models');
 const { sequelize } = require('../database/connection');
 const { Op } = require('sequelize');
 const logger = require('../utils/logger');
@@ -64,4 +64,53 @@ async function getPlayerStats(steamId, sinceDate = null) {
   }
 }
 
-module.exports = { getPlayerStats };
+async function getPlayerKillfeed(steamId, { since = null, limit = 50, offset = 0 } = {}) {
+  const player = await Player.findOne({ where: { steam_id: steamId } });
+
+  if (!player) return null;
+
+  const playerId = player.id;
+  const dateFilter = since ? { timestamp: { [Op.gte]: since } } : {};
+
+  const killIncludes = [
+    { model: Player, as: 'attacker', attributes: ['steam_id', 'last_known_name'] },
+    { model: Player, as: 'victim', attributes: ['steam_id', 'last_known_name'] },
+    { model: Weapon, as: 'weapon', attributes: ['name'] }
+  ];
+
+  const rows = await Kill.findAll({
+    where: {
+      [Op.or]: [
+        { attacker_id: playerId },
+        { victim_id: playerId }
+      ],
+      ...dateFilter
+    },
+    include: killIncludes,
+    order: [['timestamp', 'DESC']],
+    limit,
+    offset
+  });
+
+  return {
+    steamId: player.steam_id,
+    playerName: player.last_known_name,
+    count: rows.length,
+    killfeed: rows.map(row => {
+      const isKill = row.attacker_id === playerId;
+      return {
+        type: isKill ? 'kill' : 'death',
+        teamkill: row.teamkill,
+        attacker: row.attacker ? row.attacker.last_known_name : null,
+        attackerSteamId: row.attacker ? row.attacker.steam_id : null,
+        victim: row.victim ? row.victim.last_known_name : null,
+        victimSteamId: row.victim ? row.victim.steam_id : null,
+        weapon: row.weapon ? row.weapon.name : null,
+        serverId: row.server_id,
+        timestamp: row.timestamp
+      };
+    })
+  };
+}
+
+module.exports = { getPlayerStats, getPlayerKillfeed };

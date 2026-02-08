@@ -1,6 +1,6 @@
 const http = require('http');
 const url = require('url');
-const { getPlayerStats } = require('./stats');
+const { getPlayerStats, getPlayerKillfeed } = require('./stats');
 const logger = require('../utils/logger');
 
 function createApiServer() {
@@ -40,6 +40,47 @@ function createApiServer() {
 
         res.statusCode = 200;
         res.end(JSON.stringify(stats));
+      } catch (error) {
+        logger.error(`API error: ${error.message}`);
+        res.statusCode = 500;
+        res.end(JSON.stringify({ error: 'Internal server error' }));
+      }
+      return;
+    }
+
+    if (req.method === 'GET' && pathname === '/killfeed') {
+      const steamId = parsedUrl.query.steamid;
+
+      if (!steamId) {
+        res.statusCode = 400;
+        res.end(JSON.stringify({ error: 'Missing steamid query parameter' }));
+        return;
+      }
+
+      let sinceDate = null;
+      if (parsedUrl.query.since) {
+        sinceDate = new Date(parsedUrl.query.since);
+        if (isNaN(sinceDate.getTime())) {
+          res.statusCode = 400;
+          res.end(JSON.stringify({ error: 'Invalid since parameter. Use ISO 8601 format (e.g., 2025-01-01T00:00:00Z)' }));
+          return;
+        }
+      }
+
+      const limit = Math.min(parseInt(parsedUrl.query.limit) || 50, 200);
+      const offset = parseInt(parsedUrl.query.offset) || 0;
+
+      try {
+        const killfeed = await getPlayerKillfeed(steamId, { since: sinceDate, limit, offset });
+
+        if (!killfeed) {
+          res.statusCode = 404;
+          res.end(JSON.stringify({ error: 'No player found with that Steam ID' }));
+          return;
+        }
+
+        res.statusCode = 200;
+        res.end(JSON.stringify(killfeed));
       } catch (error) {
         logger.error(`API error: ${error.message}`);
         res.statusCode = 500;
