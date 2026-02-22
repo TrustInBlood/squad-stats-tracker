@@ -96,9 +96,6 @@ class ServerManager extends EventEmitter {
 
     socket.on('error', (error) => {
       logger.error(`Socket error for ${serverConfig.id}:`, error);
-      socket.on('message', (message) => {
-        logger.debug(`Raw message on error from ${serverConfig.id}:`, message);
-      });
     });
 
     const server = {

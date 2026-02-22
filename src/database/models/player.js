@@ -72,11 +72,11 @@ module.exports = (sequelize, DataTypes) => {
           }, { transaction });
         } catch (error) {
           // If we get a unique constraint error, the player was created by another transaction
-          // Retry the lookup and update instead
+          // Retry the lookup WITHOUT the current transaction to bypass REPEATABLE READ isolation
+          // and see the committed data from the other transaction
           if (error.name === 'SequelizeUniqueConstraintError') {
             player = await this.findOne({
               where: whereClause,
-              transaction
             });
             if (player) {
               const updateData = {
