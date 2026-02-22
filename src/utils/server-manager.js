@@ -90,9 +90,7 @@ class ServerManager extends EventEmitter {
 
     const socket = io(serverConfig.url, {
       auth: { token: serverConfig.token },
-      reconnection: true,
-      reconnectionAttempts: 10,
-      reconnectionDelay: 30000,
+      reconnection: false,
       timeout: 20000,
     });
 
@@ -203,9 +201,8 @@ class ServerManager extends EventEmitter {
       server.retryAttempts++;
       logger.info(`Attempting to reconnect to server ${serverConfig.id} (attempt ${server.retryAttempts}/${server.maxRetryAttempts}) in ${server.retryDelay/1000} seconds`);
       server.reconnectTimeout = setTimeout(() => {
-        this.connectToServer(serverConfig).catch(error => {
-          logger.error(`Reconnection attempt failed for server ${serverConfig.id}:`, error);
-        });
+        logger.info(`Reconnecting to server ${serverConfig.id}...`);
+        server.socket.connect();
       }, server.retryDelay);
     } else {
       logger.error(`Max reconnection attempts reached for server ${serverConfig.id}`);
