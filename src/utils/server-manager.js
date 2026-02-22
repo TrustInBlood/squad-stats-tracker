@@ -103,8 +103,7 @@ class ServerManager extends EventEmitter {
       socket,
       connected: false,
       retryAttempts: 0,
-      maxRetryAttempts: 10,
-      retryDelay: 30000,
+      baseRetryDelay: 30000,
       reconnectTimeout: null,
       config: serverConfig,
     };
@@ -190,20 +189,26 @@ class ServerManager extends EventEmitter {
     });
   }
 
+  getRetryDelay(server) {
+    const attempts = server.retryAttempts;
+    if (attempts <= 5) return server.baseRetryDelay;        // 30s for first 5
+    if (attempts <= 10) return 60000;                        // 1min for 6-10
+    if (attempts <= 15) return 120000;                       // 2min for 11-15
+    return 300000;                                           // 5min after that
+  }
+
   handleReconnect(server, serverConfig) {
     if (server.reconnectTimeout) {
       clearTimeout(server.reconnectTimeout);
     }
-    if (server.retryAttempts < server.maxRetryAttempts) {
-      server.retryAttempts++;
-      logger.info(`Attempting to reconnect to server ${serverConfig.id} (attempt ${server.retryAttempts}/${server.maxRetryAttempts}) in ${server.retryDelay/1000} seconds`);
-      server.reconnectTimeout = setTimeout(() => {
-        logger.info(`Reconnecting to server ${serverConfig.id}...`);
-        server.socket.connect();
-      }, server.retryDelay);
-    } else {
-      logger.error(`Max reconnection attempts reached for server ${serverConfig.id}`);
-    }
+    server.retryAttempts++;
+    const delay = this.getRetryDelay(server);
+    const logLevel = server.retryAttempts > 10 ? 'warn' : 'info';
+    logger[logLevel](`Attempting to reconnect to server ${serverConfig.id} (attempt ${server.retryAttempts}) in ${delay/1000} seconds`);
+    server.reconnectTimeout = setTimeout(() => {
+      logger.info(`Reconnecting to server ${serverConfig.id}...`);
+      server.socket.connect();
+    }, delay);
   }
 
   disconnectFromServer(serverId) {
