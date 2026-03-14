@@ -206,6 +206,11 @@ async function upsertPlayer(event, transaction = null) {
         sanitizedName,
         eventType: event.event,
       });
+      // Deadlocks invalidate the entire transaction - must re-throw
+      // so the caller can retry with a new transaction
+      if (error.message && error.message.includes('Deadlock')) {
+        throw error;
+      }
       continue;
     }
   }

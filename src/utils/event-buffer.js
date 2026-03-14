@@ -168,11 +168,26 @@ class EventBuffer {
             if (batchResult.errors) results.errors.push(...batchResult.errors);
           }
         } catch (error) {
-          await transaction.rollback();
+          try {
+            await transaction.rollback();
+          } catch (rollbackError) {
+            // Transaction may already be rolled back (e.g. by MariaDB after a deadlock)
+            logger.debug(`Rollback after ${eventType} error already handled:`, { message: rollbackError.message });
+          }
+          const isDeadlock = error.message && error.message.includes('Deadlock');
           logger.error(`Error processing event of type ${eventType}:`, {
             error: error.message,
             event: JSON.stringify(event),
+            isDeadlock,
           });
+
+          // Deadlocks are transient - retry quickly without counting toward max retries
+          if (isDeadlock) {
+            logger.info(`Deadlock detected for ${eventType}, scheduling immediate retry`);
+            buffer.push(event);
+            setTimeout(() => this.flushBuffer(eventType), 100 + Math.random() * 400);
+            continue;
+          }
 
           this.retryCounts[eventType] = (this.retryCounts[eventType] || 0) + 1;
           if (this.retryCounts[eventType] <= this.options.maxRetries) {
