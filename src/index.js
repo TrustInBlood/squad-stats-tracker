@@ -12,9 +12,6 @@ const { startApiServer } = require('./api/server');
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildMembers,
   ],
 });
 
@@ -104,11 +101,7 @@ async function startBot() {
     await client.login(process.env.DISCORD_TOKEN);
     logger.info('Bot is now online!');
   } catch (error) {
-    if (error.message.includes('disallowed intents')) {
-      logger.error('Bot requires privileged intents. Enable MESSAGE CONTENT and SERVER MEMBERS intents in Discord Developer Portal');
-    } else {
-      logger.error('Error logging in:', error);
-    }
+    logger.error('Error logging in:', error);
     process.exit(1);
   }
 }
