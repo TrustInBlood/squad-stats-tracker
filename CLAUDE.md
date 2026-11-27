@@ -175,7 +175,7 @@ try {
 
 ## Important Notes
 
-- The bot requires Discord privileged intents: MESSAGE CONTENT and SERVER MEMBERS
+- The bot requests only the Guilds intent; it needs no privileged intents
 - Player identification uses Steam ID 64-bit format as primary key
 - PLAYER_DIED events must be delayed to allow PLAYER_WOUNDED events to be processed first
 - Weapon cache is initialized on startup from database to avoid repeated lookups
